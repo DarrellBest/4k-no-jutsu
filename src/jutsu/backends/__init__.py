@@ -29,3 +29,4 @@ def vendor_dir() -> Path:
 
 from jutsu.backends import passthrough  # noqa: E402,F401  (registers "passthrough")
 from jutsu.backends import realesrgan  # noqa: E402,F401  (registers "realesrgan")
+from jutsu.backends import realcugan  # noqa: E402,F401  (registers "realcugan")
