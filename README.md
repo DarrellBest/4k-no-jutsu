@@ -77,20 +77,48 @@ mode.
 
 Normal mode, compare mode, and the CLI are implemented and tested (15
 implementation tasks complete). Task 16, the manual post-reboot GPU
-verification against real NVIDIA hardware, is still pending: blocked on a
-pending reboot to fix an NVIDIA driver/library version mismatch on the host
-machine. Secure mode is designed but not implemented (see the Secure mode
-section above).
+verification against real NVIDIA hardware, is complete: the NVIDIA driver is
+live post-reboot, and `jutsu compare` ran end-to-end against the real
+`Naruto Shipuden Movie.mp4` source on the real GPU (RTX PRO 6000). Secure
+mode is designed but not implemented (see the Secure mode section above).
 
-Note for whoever runs Task 16: during development on this machine (no
-working GPU driver yet, so tests ran on the CPU/lavapipe software Vulkan
+**Real-hardware verification turned up and fixed one genuine bug** (not the
+lavapipe flake noted below): the pipeline derived the frame rate used to
+reassemble each processed window from ffprobe's `r_frame_rate`, which is
+correct for constant-frame-rate sources but wrong for the variable-frame-rate
+(VFR) encoding real anime rips typically use. On the real source this made
+every backend's output play back roughly 2x too fast and come out
+correspondingly short — confirmed to affect even the plain `passthrough`
+backend, which has no GPU/timing logic of its own, isolating the bug to
+shared pipeline code rather than the AI backends. Fixed by deriving the
+assembly frame rate from the actual number of frames extracted per window
+divided by that window's real duration, which is correct regardless of
+source frame-rate characteristics. Covered by a new regression test
+(`tests/test_pipeline.py`); full suite passing (57/57). This is exactly the
+kind of defect the existing test suite's constant-frame-rate synthetic
+fixtures could never catch, which is why it only surfaced once a real
+source was used.
+
+**Real full-length timing estimate** (measured on RTX PRO 6000, 5s windows,
+15s sample clip at the 5-minute mark of the real source): realcugan
+~13.5x realtime (~20 hours for the full ~90-minute movie), realesrgan
+~14.2x realtime (~21 hours), passthrough (bicubic CPU/PIL, no GPU) ~28.9x
+realtime (~43 hours) — notably slower than either GPU-accelerated AI
+backend despite doing far less work per frame, since it runs single-threaded
+in Python with no batching. `WINDOW_SECONDS = 5.0`'s per-window ffmpeg
+subprocess overhead is a small fraction of these per-window processing
+times, so the default chunk size doesn't need adjusting for correctness or
+efficiency; a real full run should just be expected to take the better part
+of a day.
+
+Known flake, not a regression: during earlier development on this machine
+(no working GPU driver yet, so tests ran on the CPU/lavapipe software Vulkan
 fallback), the realcugan and realesrgan backends intermittently produced
 zero output frames for a short clip, causing an unrelated failure a few
 steps later. It was not reproducible in isolation and disappeared across
-several full test-suite reruns, so it looks like a software-rendering
-fallback quirk rather than a code defect. Worth watching for during the
-real GPU verification, but treat a single stray zero-frame failure
-mid-suite on this machine as a known flake rather than a fresh regression.
+several full test-suite reruns, so it looked like a software-rendering
+fallback quirk rather than a code defect — did not reproduce during the real
+GPU verification above.
 
 ## Setup
 
