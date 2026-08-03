@@ -20,10 +20,22 @@ def compute_windows(duration: float, window_seconds: float = WINDOW_SECONDS) -> 
 
 
 def preflight(config: JobConfig, source: Path) -> None:
-    """Validate a job before any processing starts: input readable, backend registered."""
+    """Validate a job before any processing starts: mode supported, input readable,
+    backend registered, backend executable present on disk."""
+    if config.mode == "secure":
+        raise SystemExit(
+            "Secure mode is not implemented yet, see docs/superpowers/plans for the "
+            "planned secure-mode design. Refusing to run this job."
+        )
     if not source.exists():
         raise FileNotFoundError(f"Source video does not exist: {source}")
-    get_backend(config.backend)
+    backend = get_backend(config.backend)
+    executable = getattr(backend, "executable", None)
+    if executable is not None and not executable.exists():
+        raise FileNotFoundError(
+            f"{config.backend} backend executable not found at {executable}, "
+            "run scripts/install_backends.sh first"
+        )
 
 
 def run_pipeline(config: JobConfig, source: Path, workdir: Path, window_seconds: float = WINDOW_SECONDS) -> Path:

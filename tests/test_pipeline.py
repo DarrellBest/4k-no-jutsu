@@ -1,10 +1,12 @@
 import shutil
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
+from jutsu.backends import register_backend
 from jutsu.config import JobConfig
-from jutsu.pipeline import compute_windows, run_pipeline
+from jutsu.pipeline import compute_windows, preflight, run_pipeline
 from jutsu.profiles import CleanupSettings, ColorSettings
 from jutsu.state import JobState
 
@@ -130,3 +132,30 @@ def test_run_pipeline_raises_clear_error_for_missing_source(tmp_path):
 
     with pytest.raises(FileNotFoundError, match="does not exist"):
         run_pipeline(config, missing_source, workdir)
+
+
+def test_run_pipeline_refuses_secure_mode(sample_clip, tmp_path):
+    # Secure mode isn't implemented; run_pipeline itself must refuse it so
+    # every caller (cmd_run, cmd_compare, any future caller) is covered
+    # automatically, not just whichever CLI command happens to check first.
+    config = replace(_passthrough_config(str(sample_clip)), mode="secure")
+    workdir = tmp_path / "work"
+
+    with pytest.raises(SystemExit):
+        run_pipeline(config, sample_clip, workdir)
+
+    assert not (workdir / "output.mp4").exists()
+
+
+def test_preflight_raises_for_missing_backend_executable(sample_clip, tmp_path):
+    class FakeMissingExeBackend:
+        executable = Path("/nonexistent/fake-upscaler-binary")
+
+        def upscale(self, frames_in, frames_out, scale, model):
+            raise AssertionError("should never be called: preflight must catch this first")
+
+    register_backend("fake_missing_exe", FakeMissingExeBackend())
+    config = replace(_passthrough_config(str(sample_clip)), backend="fake_missing_exe")
+
+    with pytest.raises(FileNotFoundError, match="fake_missing_exe"):
+        preflight(config, sample_clip)
