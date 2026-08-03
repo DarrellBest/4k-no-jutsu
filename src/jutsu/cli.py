@@ -10,6 +10,11 @@ from jutsu.publish import publish_normal
 
 def cmd_run(args: argparse.Namespace) -> int:
     config = load_job_config(Path(args.config))
+    if config.mode == "secure":
+        raise SystemExit(
+            "Secure mode is not implemented yet — see docs/superpowers/plans for the "
+            "planned secure-mode design. Refusing to run this job."
+        )
     workdir = Path(args.workdir)
     source = Path(config.source)
     output = run_pipeline(config, source, workdir)
