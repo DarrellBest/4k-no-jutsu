@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+
+# working/scratch data — never belongs in git
+data/
+work/
+scratch/
+*.mp4
+*.mkv
+*.avi
+*.png
+*.vc
+*.hc
