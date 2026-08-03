@@ -1,4 +1,5 @@
 import shutil
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from jutsu.backends import get_backend
@@ -38,7 +39,45 @@ def preflight(config: JobConfig, source: Path) -> None:
         )
 
 
-def run_pipeline(config: JobConfig, source: Path, workdir: Path, window_seconds: float = WINDOW_SECONDS) -> Path:
+def _process_window(
+    config: JobConfig,
+    source: Path,
+    workdir: Path,
+    backend,
+    info,
+    state: JobState,
+    index: int,
+    start: float,
+    length: float,
+) -> None:
+    frames_in = workdir / f"frames_in_{index:05d}"
+    frames_out = workdir / f"frames_out_{index:05d}"
+    segment_path = workdir / f"segment_{index:05d}.mp4"
+    extract_and_clean(source, start, length, config.cleanup, frames_in)
+    # Assemble at the rate actually achieved during extraction for this
+    # window, not the source's globally-probed nominal fps: on a
+    # variable-frame-rate source, ffprobe's r_frame_rate (info.fps) can be
+    # well above the real average number of frames landed per second,
+    # which would reassemble the window's frames faster than real time
+    # and produce a shorter-than-intended segment. Deriving fps from what
+    # was really extracted is correct by construction regardless of
+    # whether the source is CFR or VFR.
+    frame_count = len(list(frames_in.glob("frame_*.png")))
+    window_fps = frame_count / length if frame_count > 0 else info.fps
+    backend.upscale(frames_in, frames_out, config.scale, config.model)
+    assemble_and_color(frames_out, window_fps, config.color, segment_path)
+    state.mark_window_done(index)
+    shutil.rmtree(frames_in, ignore_errors=True)
+    shutil.rmtree(frames_out, ignore_errors=True)
+
+
+def run_pipeline(
+    config: JobConfig,
+    source: Path,
+    workdir: Path,
+    window_seconds: float = WINDOW_SECONDS,
+    max_workers: int = 1,
+) -> Path:
     preflight(config, source)
     workdir.mkdir(parents=True, exist_ok=True)
     info = probe(source)
@@ -46,31 +85,31 @@ def run_pipeline(config: JobConfig, source: Path, workdir: Path, window_seconds:
     state = JobState(workdir / "state.json", total_windows=len(windows))
     backend = get_backend(config.backend)
 
-    segment_paths = []
-    for index, (start, length) in enumerate(windows):
-        segment_path = workdir / f"segment_{index:05d}.mp4"
-        segment_paths.append(segment_path)
-        if state.is_window_done(index):
-            continue
+    segment_paths = [workdir / f"segment_{index:05d}.mp4" for index in range(len(windows))]
+    pending = [
+        (index, start, length)
+        for index, (start, length) in enumerate(windows)
+        if not state.is_window_done(index)
+    ]
 
-        frames_in = workdir / f"frames_in_{index:05d}"
-        frames_out = workdir / f"frames_out_{index:05d}"
-        extract_and_clean(source, start, length, config.cleanup, frames_in)
-        # Assemble at the rate actually achieved during extraction for this
-        # window, not the source's globally-probed nominal fps: on a
-        # variable-frame-rate source, ffprobe's r_frame_rate (info.fps) can be
-        # well above the real average number of frames landed per second,
-        # which would reassemble the window's frames faster than real time
-        # and produce a shorter-than-intended segment. Deriving fps from what
-        # was really extracted is correct by construction regardless of
-        # whether the source is CFR or VFR.
-        frame_count = len(list(frames_in.glob("frame_*.png")))
-        window_fps = frame_count / length if frame_count > 0 else info.fps
-        backend.upscale(frames_in, frames_out, config.scale, config.model)
-        assemble_and_color(frames_out, window_fps, config.color, segment_path)
-        state.mark_window_done(index)
-        shutil.rmtree(frames_in, ignore_errors=True)
-        shutil.rmtree(frames_out, ignore_errors=True)
+    if max_workers <= 1:
+        for index, start, length in pending:
+            _process_window(config, source, workdir, backend, info, state, index, start, length)
+    else:
+        # Windows are independent (disjoint frame/segment directories per
+        # index), and the real bottleneck observed on this pipeline is a
+        # near-idle GPU during single-window processing, so running several
+        # windows' extract/upscale/assemble concurrently is safe and gives a
+        # real throughput win. Threads (not processes) are enough here since
+        # each window's work is almost entirely spent blocked in subprocess
+        # calls (ffmpeg, the AI backend binary), which release the GIL.
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [
+                executor.submit(_process_window, config, source, workdir, backend, info, state, index, start, length)
+                for index, start, length in pending
+            ]
+            for future in as_completed(futures):
+                future.result()  # re-raise any worker exception in the main thread
 
     final_video = workdir / "final_video.mp4"
     concat_segments(segment_paths, final_video)

@@ -1,4 +1,5 @@
 import json
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -8,6 +9,7 @@ class JobState:
     path: Path
     total_windows: int
     _done: set[int] = field(default_factory=set, init=False)
+    _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         if self.path.exists():
@@ -18,8 +20,13 @@ class JobState:
         return index in self._done
 
     def mark_window_done(self, index: int) -> None:
-        self._done.add(index)
-        self._save()
+        # Concurrent window processing (run_pipeline with max_workers>1) calls
+        # this from multiple threads at once. Without the lock, interleaved
+        # read-truncate-write of the same file can corrupt or clobber updates
+        # (observed directly: ~40% failure rate on unlocked code under test).
+        with self._lock:
+            self._done.add(index)
+            self._save()
 
     def _save(self) -> None:
         self.path.write_text(

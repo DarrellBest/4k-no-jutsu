@@ -1,3 +1,4 @@
+import json
 import shutil
 from dataclasses import replace
 from pathlib import Path
@@ -185,6 +186,57 @@ def test_run_pipeline_uses_real_extracted_frame_rate_not_probed_nominal_rate(sam
         f"like assembly used the probed nominal fps instead of the real "
         f"extracted frame rate"
     )
+
+
+def test_run_pipeline_with_max_workers_matches_sequential_output(sample_clip, tmp_path):
+    # Concurrent window processing must produce output equivalent to the
+    # existing sequential path (same resolution, same real duration) and must
+    # leave every window marked done with no gaps -- a real symptom of a
+    # thread-safety bug in JobState would be a done_windows list missing
+    # entries even though every window's segment file was actually written.
+    config = _passthrough_config(str(sample_clip))
+    workdir_sequential = tmp_path / "sequential"
+    workdir_parallel = tmp_path / "parallel"
+
+    output_sequential = run_pipeline(config, sample_clip, workdir_sequential, window_seconds=0.3, max_workers=1)
+    output_parallel = run_pipeline(config, sample_clip, workdir_parallel, window_seconds=0.3, max_workers=8)
+
+    from jutsu.media import probe
+    info_sequential = probe(output_sequential)
+    info_parallel = probe(output_parallel)
+    assert info_parallel.width == info_sequential.width
+    assert info_parallel.height == info_sequential.height
+    assert abs(info_parallel.duration - info_sequential.duration) < 0.3
+
+    state_data = json.loads((workdir_parallel / "state.json").read_text())
+    assert sorted(state_data["done_windows"]) == list(range(state_data["total_windows"])), (
+        "expected every window marked done with no gaps after concurrent processing"
+    )
+
+
+def test_run_pipeline_max_workers_resumes_only_pending_windows(sample_clip, tmp_path):
+    # Concurrency must not re-process windows JobState already marked done --
+    # same resumability contract as the sequential path, just dispatched
+    # through a worker pool instead of a for-loop.
+    config = _passthrough_config(str(sample_clip))
+    workdir = tmp_path / "work"
+    workdir.mkdir(parents=True)
+
+    from jutsu.media import probe
+    info = probe(sample_clip)
+    windows = compute_windows(info.duration, window_seconds=0.3)
+    assert len(windows) > 4  # sanity check: needs real multi-window concurrency
+    state = JobState(workdir / "state.json", total_windows=len(windows))
+    state.mark_window_done(0)
+
+    segment_path = workdir / "segment_00000.mp4"
+    shutil.copy(sample_clip, segment_path)
+    pre_run_bytes = segment_path.read_bytes()
+
+    output = run_pipeline(config, sample_clip, workdir, window_seconds=0.3, max_workers=4)
+
+    assert output.exists()
+    assert segment_path.read_bytes() == pre_run_bytes
 
 
 def test_preflight_raises_for_missing_backend_executable(sample_clip, tmp_path):
