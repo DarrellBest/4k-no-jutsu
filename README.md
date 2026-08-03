@@ -82,6 +82,16 @@ pending reboot to fix an NVIDIA driver/library version mismatch on the host
 machine. Secure mode is designed but not implemented (see the Secure mode
 section above).
 
+Note for whoever runs Task 16: during development on this machine (no
+working GPU driver yet, so tests ran on the CPU/lavapipe software Vulkan
+fallback), the realcugan and realesrgan backends intermittently produced
+zero output frames for a short clip, causing an unrelated failure a few
+steps later. It was not reproducible in isolation and disappeared across
+several full test-suite reruns, so it looks like a software-rendering
+fallback quirk rather than a code defect. Worth watching for during the
+real GPU verification, but treat a single stray zero-frame failure
+mid-suite on this machine as a known flake rather than a fresh regression.
+
 ## Setup
 
 ```
