@@ -3,8 +3,8 @@
 Config-driven pipeline for upscaling video to 4K with AI super-resolution,
 cleaning up compression artifacts, and applying consistent color
 correction. Supports comparing models/settings on short sample clips before
-committing to a full run, and a secure mode that leaves no plaintext trace
-on disk.
+committing to a full run. A secure mode that leaves no plaintext trace on
+disk is designed but not yet implemented (see Secure mode below).
 
 Design details: [docs/superpowers/specs/2026-08-03-video-upscale-pipeline-design.md](docs/superpowers/specs/2026-08-03-video-upscale-pipeline-design.md)
 
@@ -67,8 +67,28 @@ swap-backed by the kernel, so the pipeline doesn't need system-wide swap
 disabled. Mounting the vault and the `ramfs` scratch space both require an
 interactive sudo prompt — secure mode is never run unattended.
 
+**Not implemented yet.** This section describes the planned design; secure
+mode is a deliberately separate follow-up plan and does not exist in this
+codebase today. A job config with `mode: secure` is refused at the CLI
+(non-zero exit, no processing) rather than silently falling back to normal
+mode.
+
 ## Status
 
-Design approved, implementation not started yet. Blocked on a pending
-reboot to fix an NVIDIA driver/library version mismatch on the host
-machine (required for GPU-accelerated upscaling).
+Normal mode, compare mode, and the CLI are implemented and tested (15
+implementation tasks complete). Task 16, the manual post-reboot GPU
+verification against real NVIDIA hardware, is still pending — blocked on a
+pending reboot to fix an NVIDIA driver/library version mismatch on the host
+machine. Secure mode is designed but not implemented (see the Secure mode
+section above).
+
+## Setup
+
+```
+conda activate 4k-no-jutsu
+./scripts/install_backends.sh   # fetches the realesrgan/realcugan AI backends
+```
+
+The test suite runs the AI backends' ncnn-vulkan binaries, so it needs a
+working Vulkan implementation. This works today even without a working GPU
+driver, via software rendering (e.g. mesa lavapipe for CPU-only Vulkan).
