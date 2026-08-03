@@ -1,9 +1,9 @@
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 from jutsu.config import JobConfig
 from jutsu.profiles import CleanupSettings, ColorSettings
-from jutsu.publish import publish_normal
+from jutsu.publish import publish_normal, JELLYFIN_MEDIA_DIR
 
 
 def _config() -> JobConfig:
@@ -24,7 +24,11 @@ def test_publish_uploads_to_pcloud_and_copies_to_jellyfin(tmp_path):
     output = tmp_path / "output.mp4"
     output.write_bytes(b"fake-video-bytes")
 
-    with patch("subprocess.run") as mock_run, patch("shutil.copy2") as mock_copy:
+    with (
+        patch("subprocess.run") as mock_run,
+        patch("shutil.copy2") as mock_copy,
+        patch("pathlib.Path.mkdir") as mock_mkdir,
+    ):
         publish_normal(output, _config())
 
     rclone_args = mock_run.call_args[0][0]
@@ -35,5 +39,6 @@ def test_publish_uploads_to_pcloud_and_copies_to_jellyfin(tmp_path):
 
     copy_args = mock_copy.call_args[0]
     assert copy_args[0] == output
-    assert str(copy_args[1]).endswith("output.mp4")
-    assert "/mnt/4tb/JellyfinServer/media" in str(copy_args[1])
+    assert copy_args[1] == JELLYFIN_MEDIA_DIR / output.name
+
+    mock_mkdir.assert_called_once()
