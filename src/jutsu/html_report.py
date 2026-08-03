@@ -14,7 +14,7 @@ def grab_frame(video: Path, timestamp: float, out_png: Path) -> None:
         raise RuntimeError(f"ffmpeg failed (exit {e.returncode}): {e.stderr}") from e
     if not out_png.exists():
         raise RuntimeError(
-            f"ffmpeg produced no frame at timestamp {timestamp}s from {video} — "
+            f"ffmpeg produced no frame at timestamp {timestamp}s from {video}: "
             "timestamp likely past the clip's duration"
         )
 

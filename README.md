@@ -77,7 +77,7 @@ mode.
 
 Normal mode, compare mode, and the CLI are implemented and tested (15
 implementation tasks complete). Task 16, the manual post-reboot GPU
-verification against real NVIDIA hardware, is still pending — blocked on a
+verification against real NVIDIA hardware, is still pending: blocked on a
 pending reboot to fix an NVIDIA driver/library version mismatch on the host
 machine. Secure mode is designed but not implemented (see the Secure mode
 section above).
