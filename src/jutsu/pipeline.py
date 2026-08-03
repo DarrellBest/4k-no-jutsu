@@ -1,3 +1,4 @@
+import shutil
 from pathlib import Path
 
 from jutsu.backends import get_backend
@@ -18,10 +19,18 @@ def compute_windows(duration: float, window_seconds: float = WINDOW_SECONDS) -> 
     return windows
 
 
-def run_pipeline(config: JobConfig, source: Path, workdir: Path) -> Path:
+def preflight(config: JobConfig, source: Path) -> None:
+    """Validate a job before any processing starts: input readable, backend registered."""
+    if not source.exists():
+        raise FileNotFoundError(f"Source video does not exist: {source}")
+    get_backend(config.backend)
+
+
+def run_pipeline(config: JobConfig, source: Path, workdir: Path, window_seconds: float = WINDOW_SECONDS) -> Path:
+    preflight(config, source)
     workdir.mkdir(parents=True, exist_ok=True)
     info = probe(source)
-    windows = compute_windows(info.duration)
+    windows = compute_windows(info.duration, window_seconds)
     state = JobState(workdir / "state.json", total_windows=len(windows))
     backend = get_backend(config.backend)
 
@@ -38,6 +47,8 @@ def run_pipeline(config: JobConfig, source: Path, workdir: Path) -> Path:
         backend.upscale(frames_in, frames_out, config.scale, config.model)
         assemble_and_color(frames_out, info.fps, config.color, segment_path)
         state.mark_window_done(index)
+        shutil.rmtree(frames_in, ignore_errors=True)
+        shutil.rmtree(frames_out, ignore_errors=True)
 
     final_video = workdir / "final_video.mp4"
     concat_segments(segment_paths, final_video)

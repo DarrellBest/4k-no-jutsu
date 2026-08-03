@@ -1,6 +1,8 @@
 import shutil
 from pathlib import Path
 
+import pytest
+
 from jutsu.config import JobConfig
 from jutsu.pipeline import compute_windows, run_pipeline
 from jutsu.profiles import CleanupSettings, ColorSettings
@@ -44,6 +46,11 @@ def test_run_pipeline_produces_upscaled_output(sample_clip, tmp_path):
     assert info.height == 96  # 48 * scale(2)
     assert info.has_audio is True
 
+    # Frames must be discarded per window (extract -> upscale -> encode ->
+    # discard -> next window), not left to accumulate unbounded disk usage.
+    assert not (workdir / "frames_in_00000").exists()
+    assert not (workdir / "frames_out_00000").exists()
+
 
 def test_run_pipeline_skips_completed_windows(sample_clip, tmp_path):
     config = _passthrough_config(str(sample_clip))
@@ -75,3 +82,51 @@ def test_run_pipeline_skips_completed_windows(sample_clip, tmp_path):
     # window 0, this file would have been overwritten with freshly assembled
     # (upscaled) content instead of staying byte-identical.
     assert segment_path.read_bytes() == pre_run_bytes
+
+
+def test_run_pipeline_with_small_window_seconds_produces_multiple_windows(sample_clip, tmp_path):
+    config = _passthrough_config(str(sample_clip))
+    workdir = tmp_path / "work"
+
+    output = run_pipeline(config, sample_clip, workdir, window_seconds=1.0)
+
+    assert output.exists()
+    # ~3s clip with 1.0s windows must produce more than one segment/window.
+    assert (workdir / "segment_00001.mp4").exists()
+
+    from jutsu.media import probe
+    source_info = probe(sample_clip)
+    output_info = probe(output)
+    # Multi-segment concat + audio mux must reproduce the source's duration.
+    assert abs(output_info.duration - source_info.duration) < 0.5
+
+
+def test_run_pipeline_resumes_with_mixed_done_and_pending_windows(sample_clip, tmp_path):
+    config = _passthrough_config(str(sample_clip))
+    workdir = tmp_path / "work"
+    workdir.mkdir(parents=True)
+
+    from jutsu.media import probe
+    info = probe(sample_clip)
+    windows = compute_windows(info.duration, window_seconds=1.0)
+    assert len(windows) > 1  # sanity check: this test needs a genuine multi-window mix
+    state = JobState(workdir / "state.json", total_windows=len(windows))
+    state.mark_window_done(0)
+
+    segment_path = workdir / "segment_00000.mp4"
+    shutil.copy(sample_clip, segment_path)
+    pre_run_bytes = segment_path.read_bytes()
+
+    output = run_pipeline(config, sample_clip, workdir, window_seconds=1.0)
+
+    assert output.exists()
+    assert segment_path.read_bytes() == pre_run_bytes
+
+
+def test_run_pipeline_raises_clear_error_for_missing_source(tmp_path):
+    missing_source = tmp_path / "does_not_exist.mp4"
+    config = _passthrough_config(str(missing_source))
+    workdir = tmp_path / "work"
+
+    with pytest.raises(FileNotFoundError, match="does not exist"):
+        run_pipeline(config, missing_source, workdir)
