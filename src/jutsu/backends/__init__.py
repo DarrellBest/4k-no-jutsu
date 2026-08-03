@@ -25,3 +25,6 @@ def vendor_dir() -> Path:
     if override:
         return Path(override)
     return Path(__file__).resolve().parents[3] / "vendor"
+
+
+from jutsu.backends import passthrough  # noqa: E402,F401  (registers "passthrough")
