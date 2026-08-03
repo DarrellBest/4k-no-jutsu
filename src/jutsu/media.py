@@ -82,6 +82,23 @@ def concat_segments(segments: list[Path], output: Path) -> None:
     )
 
 
+def pad_to_resolution(source: Path, width: int, height: int, output: Path) -> None:
+    """Scale to fit within width x height preserving aspect ratio (no
+    distortion), then pad with black bars to hit that exact resolution."""
+    _run(
+        [
+            "ffmpeg", "-y", "-i", str(source),
+            "-vf", (
+                f"scale=w={width}:h={height}:force_original_aspect_ratio=decrease,"
+                f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=black"
+            ),
+            "-an",
+            "-c:v", "libx264", "-crf", "18", "-preset", "medium", "-pix_fmt", "yuv420p",
+            str(output),
+        ]
+    )
+
+
 def mux_audio(video: Path, source: Path, output: Path) -> None:
     _run(
         [

@@ -1,13 +1,16 @@
 from pathlib import Path
 
 import pytest
+from PIL import Image
 
+from jutsu.html_report import grab_frame
 from jutsu.media import (
     assemble_and_color,
     concat_segments,
     extract_and_clean,
     extract_clip,
     mux_audio,
+    pad_to_resolution,
     probe,
 )
 from jutsu.profiles import CleanupSettings, ColorSettings
@@ -86,3 +89,33 @@ def test_concat_and_mux_audio_roundtrip(sample_clip, tmp_path):
     mux_audio(concatenated, sample_clip, final)
     info = probe(final)
     assert info.has_audio is True
+
+
+def test_pad_to_resolution_fits_without_distortion_and_pads_with_black(sample_clip, tmp_path):
+    # sample_clip is 64x48 (4:3). Padding into a 128x128 canvas is
+    # width-constrained (scale factor 2.0 on both axes since 128/64 == 2.0 <
+    # 128/48 == 2.667), so the real content lands at exactly 128x96,
+    # centered, with black bars filling the remaining 16px top and bottom.
+    # A scale that distorted the aspect ratio instead of padding would
+    # stretch content into those bars instead of leaving them black.
+    output = tmp_path / "padded.mp4"
+    pad_to_resolution(sample_clip, width=128, height=128, output=output)
+
+    info = probe(output)
+    assert info.width == 128
+    assert info.height == 128
+
+    frame_path = tmp_path / "frame.png"
+    grab_frame(output, timestamp=0.5, out_png=frame_path)
+    with Image.open(frame_path) as img:
+        img = img.convert("RGB")
+        top_bar = img.getpixel((64, 4))
+        bottom_bar = img.getpixel((64, 123))
+        content_center = img.getpixel((64, 64))
+
+    def is_near_black(pixel):
+        return all(channel < 10 for channel in pixel)
+
+    assert is_near_black(top_bar), f"expected black padding at top, got {top_bar}"
+    assert is_near_black(bottom_bar), f"expected black padding at bottom, got {bottom_bar}"
+    assert not is_near_black(content_center), "expected real (non-black) content at center"
