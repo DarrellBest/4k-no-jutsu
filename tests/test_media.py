@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from jutsu.media import (
     assemble_and_color,
     concat_segments,
@@ -17,6 +19,22 @@ def test_probe_reads_duration_and_resolution(sample_clip):
     assert info.width == 64
     assert info.height == 48
     assert info.has_audio is True
+
+
+def test_probe_failure_includes_ffprobe_stderr(tmp_path):
+    bad_file = tmp_path / "not_a_video.mp4"
+    bad_file.write_text("this is not a video file")
+
+    with pytest.raises(Exception) as exc_info:
+        probe(bad_file)
+
+    message = str(exc_info.value)
+    # Must surface actual ffprobe diagnostic text, not just a bare exit code
+    # (subprocess.CalledProcessError's default __str__ only shows the code).
+    assert any(
+        keyword in message.lower()
+        for keyword in ("invalid data", "moov", "error", "could not")
+    ), f"expected real ffprobe error text in message, got: {message!r}"
 
 
 def test_extract_and_clean_writes_frames(sample_clip, tmp_path):
