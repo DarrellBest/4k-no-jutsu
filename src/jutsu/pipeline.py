@@ -56,8 +56,18 @@ def run_pipeline(config: JobConfig, source: Path, workdir: Path, window_seconds:
         frames_in = workdir / f"frames_in_{index:05d}"
         frames_out = workdir / f"frames_out_{index:05d}"
         extract_and_clean(source, start, length, config.cleanup, frames_in)
+        # Assemble at the rate actually achieved during extraction for this
+        # window, not the source's globally-probed nominal fps: on a
+        # variable-frame-rate source, ffprobe's r_frame_rate (info.fps) can be
+        # well above the real average number of frames landed per second,
+        # which would reassemble the window's frames faster than real time
+        # and produce a shorter-than-intended segment. Deriving fps from what
+        # was really extracted is correct by construction regardless of
+        # whether the source is CFR or VFR.
+        frame_count = len(list(frames_in.glob("frame_*.png")))
+        window_fps = frame_count / length if frame_count > 0 else info.fps
         backend.upscale(frames_in, frames_out, config.scale, config.model)
-        assemble_and_color(frames_out, info.fps, config.color, segment_path)
+        assemble_and_color(frames_out, window_fps, config.color, segment_path)
         state.mark_window_done(index)
         shutil.rmtree(frames_in, ignore_errors=True)
         shutil.rmtree(frames_out, ignore_errors=True)

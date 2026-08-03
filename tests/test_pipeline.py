@@ -147,6 +147,46 @@ def test_run_pipeline_refuses_secure_mode(sample_clip, tmp_path):
     assert not (workdir / "output.mp4").exists()
 
 
+def test_run_pipeline_uses_real_extracted_frame_rate_not_probed_nominal_rate(sample_clip, tmp_path, monkeypatch):
+    # Regression test for the VFR fps bug: run_pipeline must assemble each
+    # window at the frame rate actually achieved during extraction, not the
+    # source's globally-probed nominal fps (media.probe's fps, derived from
+    # ffprobe's r_frame_rate). On a real variable-frame-rate source,
+    # r_frame_rate can be well above the real average extractable rate, which
+    # (pre-fix) reassembled windows faster than real time and produced
+    # shorter-than-intended output.
+    #
+    # sample_clip is genuinely encoded at 10fps (see conftest.py). We
+    # simulate the VFR mismatch surgically: monkeypatch pipeline's probe() to
+    # report a nominal fps far above that real rate (60, matching the
+    # r_frame_rate=59.94 seen in the real-world repro in the bugfix brief)
+    # while leaving extraction untouched, so it still writes real frames at
+    # the real ~10fps rate. If the fix works, the assembled/concatenated/
+    # muxed output's duration should still match the source's real duration;
+    # pre-fix, using the fake nominal fps for assembly would shrink it by
+    # roughly a factor of 6 (10fps content encoded as if it were 60fps).
+    import jutsu.pipeline as pipeline_module
+    from jutsu.media import probe as real_probe
+
+    config = _passthrough_config(str(sample_clip))
+    workdir = tmp_path / "work"
+
+    real_info = real_probe(sample_clip)
+    fake_info = replace(real_info, fps=60.0)
+    monkeypatch.setattr(pipeline_module, "probe", lambda source: fake_info)
+
+    output = run_pipeline(config, sample_clip, workdir, window_seconds=1.0)
+
+    assert output.exists()
+    output_info = real_probe(output)
+    assert abs(output_info.duration - real_info.duration) < 0.5, (
+        f"expected output duration close to source duration "
+        f"({real_info.duration}s), got {output_info.duration}s -- looks "
+        f"like assembly used the probed nominal fps instead of the real "
+        f"extracted frame rate"
+    )
+
+
 def test_preflight_raises_for_missing_backend_executable(sample_clip, tmp_path):
     class FakeMissingExeBackend:
         executable = Path("/nonexistent/fake-upscaler-binary")
