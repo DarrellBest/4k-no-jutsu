@@ -5,7 +5,7 @@ from jutsu.compare import Variant, run_compare
 from jutsu.config import load_job_config
 from jutsu.html_report import build_comparison_html
 from jutsu.media import probe
-from jutsu.pipeline import run_pipeline
+from jutsu.pipeline import preflight, run_pipeline
 from jutsu.publish import publish_normal
 
 
@@ -29,6 +29,13 @@ def cmd_compare(args: argparse.Namespace) -> int:
     config = load_job_config(Path(args.config))
     workdir = Path(args.workdir)
     source = Path(config.source)
+
+    # Must run before ANY plaintext intermediate is written. run_compare's
+    # extract_clip writes clip_source.mp4 to plaintext disk before
+    # run_pipeline (and therefore preflight, where the secure-mode check now
+    # lives) is ever reached, so cmd_compare needs its own early call to the
+    # same guard rather than relying on run_pipeline to catch it downstream.
+    preflight(config, source)
 
     variants = [
         Variant(label="realcugan", backend="realcugan", model="models-se", scale=config.scale),
@@ -69,7 +76,12 @@ def cmd_compare(args: argparse.Namespace) -> int:
     frame_period = 1.0 / original_info.fps if original_info.fps > 0 else 0.1
     epsilon = max(0.05, frame_period * 1.5)
     upper_bound = max(0.0, actual_duration - epsilon)
-    raw_timestamps = [1.0, args.duration / 2, args.duration - 1.0]
+    # Built from the clip's ACTUAL duration, not args.duration (the
+    # requested one): when the real clip is shorter than requested (the
+    # common case, per Critical 2's fix), building these from args.duration
+    # made all three collapse to the same clamped upper_bound, silently
+    # shrinking the report to one row instead of three.
+    raw_timestamps = [1.0, actual_duration / 2, actual_duration - 1.0]
     timestamps = sorted({max(0.0, min(t, upper_bound)) for t in raw_timestamps})
     html = build_comparison_html(results, timestamps, workdir / "report_frames")
     report_path = workdir / "comparison.html"

@@ -99,3 +99,25 @@ def test_cli_compare_rejects_secure_mode(sample_clip, tmp_path):
         main(["compare", str(config_path), str(workdir), "--start", "0", "--duration", "2"])
 
     assert not (workdir / "comparison.html").exists()
+    # The guard must fire before ANY plaintext intermediate is written, not
+    # just before the final report: run_compare's extract_clip writes
+    # clip_source.mp4 to plaintext disk before run_pipeline (and therefore
+    # preflight) is ever reached, so this must be checked earlier still.
+    assert not workdir.exists() or not any(workdir.iterdir())
+
+
+def test_cli_compare_report_has_distinct_timestamps_when_clip_shorter_than_requested(sample_clip, tmp_path):
+    # sample_clip is ~3s. --start 2 --duration 15 means the real extracted
+    # clip is only ~1s. raw_timestamps must be built from the clip's ACTUAL
+    # duration, not the requested 15s, or all three candidate timestamps
+    # clamp to the same value and the report silently collapses to one row
+    # instead of three.
+    config_path = tmp_path / "job.yaml"
+    _write_config(config_path, sample_clip)
+    workdir = tmp_path / "work"
+
+    exit_code = main(["compare", str(config_path), str(workdir), "--start", "2", "--duration", "15"])
+
+    assert exit_code == 0
+    html = (workdir / "comparison.html").read_text()
+    assert html.count('<div class="row">') == 3
