@@ -1,5 +1,8 @@
+import subprocess
 from pathlib import Path
 from unittest.mock import patch, MagicMock
+
+import pytest
 
 from jutsu.config import JobConfig
 from jutsu.profiles import CleanupSettings, ColorSettings
@@ -42,3 +45,20 @@ def test_publish_uploads_to_pcloud_and_copies_to_jellyfin(tmp_path):
     assert copy_args[1] == JELLYFIN_MEDIA_DIR / output.name
 
     mock_mkdir.assert_called_once()
+
+
+def test_publish_surfaces_rclone_stderr_on_failure(tmp_path):
+    # Consistent with every other subprocess call site in the codebase:
+    # a bare CalledProcessError only shows the exit code, so failures must
+    # be re-raised with the captured stderr included.
+    output = tmp_path / "output.mp4"
+    output.write_bytes(b"fake-video-bytes")
+
+    failure = subprocess.CalledProcessError(
+        returncode=1, cmd=["rclone", "copy"], stderr="rclone: remote not found"
+    )
+    with patch("subprocess.run", side_effect=failure):
+        with pytest.raises(Exception) as exc_info:
+            publish_normal(output, _config())
+
+    assert "rclone: remote not found" in str(exc_info.value)

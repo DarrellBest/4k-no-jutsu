@@ -9,6 +9,10 @@ PCLOUD_REMOTE = "pcloud:Naruto"
 
 
 def publish_normal(output: Path, config: JobConfig) -> None:
-    subprocess.run(["rclone", "copy", str(output), PCLOUD_REMOTE], check=True)
+    cmd = ["rclone", "copy", str(output), PCLOUD_REMOTE]
+    try:
+        subprocess.run(cmd, check=True, capture_output=True, text=True)
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"{cmd[0]} failed (exit {e.returncode}): {e.stderr}") from e
     JELLYFIN_MEDIA_DIR.mkdir(parents=True, exist_ok=True)
     shutil.copy2(output, JELLYFIN_MEDIA_DIR / output.name)
