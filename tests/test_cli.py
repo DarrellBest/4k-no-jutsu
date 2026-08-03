@@ -19,6 +19,17 @@ def test_cli_run_produces_output_without_publishing(sample_clip, tmp_path):
     assert (workdir / "output.mp4").exists()
 
 
+def test_cli_run_accepts_max_workers(sample_clip, tmp_path):
+    config_path = tmp_path / "job.yaml"
+    _write_config(config_path, sample_clip)
+    workdir = tmp_path / "work"
+
+    exit_code = main(["run", str(config_path), str(workdir), "--no-publish", "--max-workers", "4"])
+
+    assert exit_code == 0
+    assert (workdir / "output.mp4").exists()
+
+
 def test_cli_run_rejects_secure_mode(sample_clip, tmp_path):
     config_path = tmp_path / "job.yaml"
     _write_config(config_path, sample_clip, mode="secure")

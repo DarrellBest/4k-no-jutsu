@@ -18,7 +18,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         )
     workdir = Path(args.workdir)
     source = Path(config.source)
-    output = run_pipeline(config, source, workdir)
+    output = run_pipeline(config, source, workdir, max_workers=args.max_workers)
     if config.mode == "normal" and not args.no_publish:
         publish_normal(output, config)
     print(f"Done: {output}")
@@ -100,6 +100,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("config")
     run_parser.add_argument("workdir")
     run_parser.add_argument("--no-publish", action="store_true")
+    run_parser.add_argument("--max-workers", type=int, default=1)
     run_parser.set_defaults(func=cmd_run)
 
     compare_parser = sub.add_parser("compare", help="Compare models/settings on a short clip")
