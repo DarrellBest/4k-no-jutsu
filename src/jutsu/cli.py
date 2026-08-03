@@ -36,7 +36,13 @@ def cmd_compare(args: argparse.Namespace) -> int:
     ]
     results = run_compare(config, source, variants, args.start, args.duration, workdir)
 
-    timestamps = [args.start + 1.0, args.start + args.duration / 2, args.start + args.duration - 1.0]
+    # Clip-relative, not absolute-source-relative: run_compare extracts a clip
+    # whose own internal timeline starts at 0, and build_comparison_html seeks
+    # into that clip, not the source. Clamp to the clip's actual duration and
+    # dedupe (a short --duration can otherwise collapse all three to the same
+    # timestamp).
+    raw_timestamps = [1.0, args.duration / 2, args.duration - 1.0]
+    timestamps = sorted({max(0.0, min(t, args.duration)) for t in raw_timestamps})
     html = build_comparison_html(results, timestamps, workdir / "report_frames")
     report_path = workdir / "comparison.html"
     report_path.write_text(html)

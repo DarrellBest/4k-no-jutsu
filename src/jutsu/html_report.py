@@ -5,10 +5,18 @@ from pathlib import Path
 
 def grab_frame(video: Path, timestamp: float, out_png: Path) -> None:
     out_png.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run(
-        ["ffmpeg", "-y", "-ss", str(timestamp), "-i", str(video), "-frames:v", "1", str(out_png)],
-        check=True, capture_output=True,
-    )
+    try:
+        subprocess.run(
+            ["ffmpeg", "-y", "-ss", str(timestamp), "-i", str(video), "-frames:v", "1", str(out_png)],
+            check=True, capture_output=True, text=True,
+        )
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"ffmpeg failed (exit {e.returncode}): {e.stderr}") from e
+    if not out_png.exists():
+        raise RuntimeError(
+            f"ffmpeg produced no frame at timestamp {timestamp}s from {video} — "
+            "timestamp likely past the clip's duration"
+        )
 
 
 def _data_uri(png_path: Path) -> str:

@@ -41,3 +41,18 @@ def test_cli_compare_produces_report(sample_clip, tmp_path):
 
     assert exit_code == 0
     assert (workdir / "comparison.html").exists()
+
+
+def test_cli_compare_with_nonzero_start_succeeds(sample_clip, tmp_path):
+    # Timestamps used for frame grabs must be clip-relative, not absolute
+    # source-relative, or any non-zero --start seeks past the extracted
+    # clip's short duration and crashes (this is also the CLI's own default,
+    # --start 60.0, against a full-length source).
+    config_path = tmp_path / "job.yaml"
+    _write_config(config_path, sample_clip)
+    workdir = tmp_path / "work"
+
+    exit_code = main(["compare", str(config_path), str(workdir), "--start", "1", "--duration", "2"])
+
+    assert exit_code == 0
+    assert (workdir / "comparison.html").exists()
