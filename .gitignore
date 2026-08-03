@@ -13,3 +13,5 @@ scratch/
 *.png
 *.vc
 *.hc
+
+vendor/
