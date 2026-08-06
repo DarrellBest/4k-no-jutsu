@@ -92,6 +92,11 @@ def pad_to_resolution(source: Path, width: int, height: int, output: Path) -> No
                 f"scale=w={width}:h={height}:force_original_aspect_ratio=decrease,"
                 f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=black"
             ),
+            # Never retime frames to conform to a declared/nominal rate that
+            # may not match the input's real rate (observed on real pipeline
+            # output: silent frame duplication/dropping that shrank duration).
+            # A pure spatial transform must pass timestamps through unchanged.
+            "-fps_mode", "passthrough",
             "-an",
             "-c:v", "libx264", "-crf", "18", "-preset", "medium", "-pix_fmt", "yuv420p",
             str(output),

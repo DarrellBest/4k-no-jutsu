@@ -1,3 +1,4 @@
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -119,3 +120,47 @@ def test_pad_to_resolution_fits_without_distortion_and_pads_with_black(sample_cl
     assert is_near_black(top_bar), f"expected black padding at top, got {top_bar}"
     assert is_near_black(bottom_bar), f"expected black padding at bottom, got {bottom_bar}"
     assert not is_near_black(content_center), "expected real (non-black) content at center"
+
+
+def test_pad_to_resolution_preserves_duration_on_concatenated_variable_rate_input(tmp_path):
+    # Motivated by a real defect found on a full-movie production run: on a
+    # concatenation of many per-window segments (each assembled at a
+    # slightly different real fps, computed from actual extracted frame
+    # count), ffmpeg's default CFR-conforming re-encode silently
+    # duplicated/dropped frames instead of preserving real timing --
+    # ~90 minutes of real content shrank to ~83 minutes with no error or
+    # warning. Fixed via -fps_mode passthrough.
+    #
+    # NOTE: this 3-segment synthetic fixture does NOT reliably reproduce
+    # the defect on its own -- verified directly that this assertion passes
+    # even without the fix at this small scale (the real repro needed
+    # ~100+ genuinely independently-encoded segments, impractical for a
+    # fast unit test). Keep this as a basic duration-preservation sanity
+    # check, not proof the fps_mode fix is load-bearing; the real coverage
+    # for this class of defect is the production verification recorded in
+    # git history (commits around the Task 16 real-hardware run).
+    segments = []
+    for i, rate in enumerate([9, 10, 11]):
+        segment = tmp_path / f"segment{i}.mp4"
+        subprocess.run(
+            [
+                "ffmpeg", "-y", "-f", "lavfi", "-i", f"testsrc=duration=2:size=64x48:rate={rate}",
+                "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", str(segment),
+            ],
+            check=True, capture_output=True,
+        )
+        segments.append(segment)
+
+    concatenated = tmp_path / "concatenated.mp4"
+    concat_segments(segments, concatenated)
+    concatenated_info = probe(concatenated)
+
+    output = tmp_path / "padded.mp4"
+    pad_to_resolution(concatenated, width=128, height=128, output=output)
+    output_info = probe(output)
+
+    assert abs(output_info.duration - concatenated_info.duration) < 0.5, (
+        f"expected padded output duration to match input ({concatenated_info.duration}s), "
+        f"got {output_info.duration}s -- frames were likely duplicated/dropped to conform "
+        f"to a declared frame rate that doesn't match the real content rate"
+    )
