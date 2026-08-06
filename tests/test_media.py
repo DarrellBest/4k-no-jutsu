@@ -92,6 +92,62 @@ def test_concat_and_mux_audio_roundtrip(sample_clip, tmp_path):
     assert info.has_audio is True
 
 
+def test_concat_segments_batches_large_inputs(sample_clip, tmp_path):
+    # Real production defect: ffmpeg's concat demuxer + `-c copy` becomes
+    # unreliable (observed: hangs indefinitely, non-monotonic DTS) once it's
+    # stream-copying roughly 1000+ independently-encoded segments in one
+    # process. The fix batches segments into groups, re-encodes each batch
+    # (which resolves the timestamp corruption -- a fresh encode generates
+    # clean, consistent timestamps regardless of input quirks), then does a
+    # final lightweight -c copy concat of the small number of clean batches.
+    #
+    # This test exercises the batching CODE PATH (correct grouping, correct
+    # stitching, temp cleanup) at a small, fast scale via batch_size=3 --
+    # it does NOT reproduce the real ffmpeg-level defect itself (verified
+    # directly: that only manifests with ~100+ genuinely independent
+    # encodes, impractical for a fast unit test). The real defect fix was
+    # verified against real production content (see git history / README).
+    frames_dir = tmp_path / "frames"
+    extract_and_clean(sample_clip, start=0.0, duration=1.0, cleanup=CleanupSettings(), frames_dir=frames_dir)
+
+    segments = []
+    for i in range(7):
+        segment = tmp_path / f"segment{i}.mp4"
+        assemble_and_color(frames_dir, fps=10.0, color=ColorSettings(), output=segment)
+        segments.append(segment)
+
+    single_segment_duration = probe(segments[0]).duration
+
+    output = tmp_path / "concatenated.mp4"
+    concat_segments(segments, output, batch_size=3)
+
+    assert output.exists()
+    output_info = probe(output)
+    expected_duration = single_segment_duration * len(segments)
+    assert abs(output_info.duration - expected_duration) < 0.5, (
+        f"expected ~{expected_duration}s (7 x {single_segment_duration}s), got {output_info.duration}s"
+    )
+
+    batch_dir = output.parent / f"{output.stem}_concat_batches"
+    assert not batch_dir.exists(), "temp batch directory must be cleaned up after concat"
+
+
+def test_concat_segments_small_input_unchanged(sample_clip, tmp_path):
+    # Below the batch threshold, behavior must be identical to before:
+    # a single direct -c copy concat, no batching overhead.
+    frames_dir = tmp_path / "frames"
+    extract_and_clean(sample_clip, start=0.0, duration=1.0, cleanup=CleanupSettings(), frames_dir=frames_dir)
+    segment = tmp_path / "segment.mp4"
+    assemble_and_color(frames_dir, fps=10.0, color=ColorSettings(), output=segment)
+
+    output = tmp_path / "concatenated.mp4"
+    concat_segments([segment], output)
+
+    assert output.exists()
+    batch_dir = output.parent / f"{output.stem}_concat_batches"
+    assert not batch_dir.exists(), "small inputs must not go through the batching path"
+
+
 def test_pad_to_resolution_fits_without_distortion_and_pads_with_black(sample_clip, tmp_path):
     # sample_clip is 64x48 (4:3). Padding into a 128x128 canvas is
     # width-constrained (scale factor 2.0 on both axes since 128/64 == 2.0 <

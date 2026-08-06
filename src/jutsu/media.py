@@ -1,4 +1,5 @@
 import json
+import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -74,12 +75,61 @@ def assemble_and_color(frames_dir: Path, fps: float, color: ColorSettings, outpu
     )
 
 
-def concat_segments(segments: list[Path], output: Path) -> None:
-    filelist = output.parent / "concat_list.txt"
+CONCAT_BATCH_SIZE = 100
+
+
+def _concat_copy(segments: list[Path], output: Path, filelist_name: str = "concat_list.txt") -> None:
+    filelist = output.parent / filelist_name
     filelist.write_text("\n".join(f"file '{s.resolve()}'" for s in segments))
     _run(
         ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(filelist), "-c", "copy", str(output)]
     )
+
+
+def _concat_reencode(segments: list[Path], output: Path, filelist_name: str) -> None:
+    filelist = output.parent / filelist_name
+    filelist.write_text("\n".join(f"file '{s.resolve()}'" for s in segments))
+    _run(
+        [
+            "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(filelist),
+            "-fps_mode", "passthrough",
+            "-c:v", "libx264", "-crf", "18", "-preset", "medium", "-pix_fmt", "yuv420p",
+            str(output),
+        ]
+    )
+
+
+def concat_segments(segments: list[Path], output: Path, batch_size: int = CONCAT_BATCH_SIZE) -> None:
+    # ffmpeg's concat demuxer + `-c copy` becomes unreliable (observed on
+    # real production content: indefinite hangs, non-monotonic DTS) once
+    # it's stream-copying roughly 1000+ independently-encoded segments in
+    # one process -- each segment (from assemble_and_color) has its own
+    # independent B-frame timestamp structure, and splicing that many
+    # together via stream copy eventually corrupts timestamp accounting.
+    # Below the threshold, do the original fast, lossless direct concat.
+    if len(segments) <= batch_size:
+        _concat_copy(segments, output)
+        return
+
+    # Above the threshold: batch into groups, re-encode each batch (a fresh
+    # encode generates clean, consistent timestamps regardless of input
+    # quirks -- this is what actually fixes the corruption, at the cost of
+    # one extra encoding generation for batched content), then do a final
+    # lightweight, lossless -c copy concat of the small number of now-clean
+    # batches.
+    batch_dir = output.parent / f"{output.stem}_concat_batches"
+    batch_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        batch_outputs = []
+        for batch_index, start in enumerate(range(0, len(segments), batch_size)):
+            batch_segments = segments[start:start + batch_size]
+            batch_output = batch_dir / f"batch_{batch_index:05d}.mp4"
+            _concat_reencode(batch_segments, batch_output, filelist_name=f"batch_{batch_index:05d}_list.txt")
+            batch_outputs.append(batch_output)
+
+        _concat_copy(batch_outputs, output, filelist_name="concat_list.txt")
+    finally:
+        shutil.rmtree(batch_dir, ignore_errors=True)
 
 
 def pad_to_resolution(source: Path, width: int, height: int, output: Path) -> None:
