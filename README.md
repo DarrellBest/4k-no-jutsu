@@ -122,11 +122,62 @@ GPU verification above.
 
 ## Setup
 
+Setup (environment + install + AI backends) is a separate, one-time step
+from actually running the pipeline:
+
 ```
+./scripts/setup.sh
 conda activate 4k-no-jutsu
-./scripts/install_backends.sh   # fetches the realesrgan/realcugan AI backends
 ```
 
+`scripts/setup.sh` creates the conda env, installs `jutsu` itself
+(editable), and fetches the vendored `realesrgan`/`realcugan` ncnn-vulkan
+binaries. It's idempotent — safe to re-run.
+
 The test suite runs the AI backends' ncnn-vulkan binaries, so it needs a
-working Vulkan implementation. This works today even without a working GPU
-driver, via software rendering (e.g. mesa lavapipe for CPU-only Vulkan).
+working Vulkan implementation. This works even without a GPU driver, via
+software rendering (e.g. mesa lavapipe for CPU-only Vulkan) — slower, but
+functional for development.
+
+## Running
+
+`jutsu` works on any video ffmpeg can read, at any source resolution — it's
+not anime- or Naruto-specific despite the job config examples. A minimal
+job config:
+
+```yaml
+source: /path/to/your/video.mp4
+profile: anime   # or "live-action" — picks default backend/model/cleanup
+```
+
+Run it, letterboxing the AI-upscaled output to an exact target resolution
+(AI backends only support fixed integer scale factors, so this is usually
+what you want to land on a standard size without distortion):
+
+```
+jutsu run job.yaml ./workdir --target-resolution 4k --max-workers 8
+```
+
+`--target-resolution` accepts `4k`/`uhd` (3840x2160), `1080p`, `720p`, or an
+explicit `WIDTHxHEIGHT` like `3200x1800`. Omit it to keep the AI backend's
+native scaled-but-unpadded output. `--max-workers` runs that many windows'
+extract/upscale/assemble concurrently — the AI backend binaries are usually
+far from GPU-saturated processing one window at a time, so this can give a
+large real speedup on a capable GPU; benchmark on your own hardware before
+picking a number; going too high shifts the bottleneck to CPU/disk instead.
+
+For a long source, run `jutsu compare` first on a short clip to sanity-check
+model choice and settings before committing to a full-length run — see
+Compare mode below.
+
+### Publishing (optional)
+
+`jutsu run` (without `--no-publish`) will upload to pCloud and/or copy into
+a Jellyfin media library after processing, but **only if configured** —
+with neither set, the finished file just stays in your workdir (that's the
+real output either way):
+
+```
+export JUTSU_PCLOUD_REMOTE="myremote:SomeFolder"   # any rclone remote:path
+export JUTSU_JELLYFIN_DIR="/path/to/jellyfin/media/Movies"
+```

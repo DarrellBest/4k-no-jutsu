@@ -19,6 +19,43 @@ def test_cli_run_produces_output_without_publishing(sample_clip, tmp_path):
     assert (workdir / "output.mp4").exists()
 
 
+def test_cli_run_accepts_target_resolution_shorthand(sample_clip, tmp_path):
+    config_path = tmp_path / "job.yaml"
+    _write_config(config_path, sample_clip)
+    workdir = tmp_path / "work"
+
+    exit_code = main(["run", str(config_path), str(workdir), "--no-publish", "--target-resolution", "4k"])
+
+    assert exit_code == 0
+    from jutsu.media import probe
+    info = probe(workdir / "output.mp4")
+    assert info.width == 3840
+    assert info.height == 2160
+
+
+def test_cli_run_accepts_target_resolution_explicit(sample_clip, tmp_path):
+    config_path = tmp_path / "job.yaml"
+    _write_config(config_path, sample_clip)
+    workdir = tmp_path / "work"
+
+    exit_code = main(["run", str(config_path), str(workdir), "--no-publish", "--target-resolution", "256x256"])
+
+    assert exit_code == 0
+    from jutsu.media import probe
+    info = probe(workdir / "output.mp4")
+    assert info.width == 256
+    assert info.height == 256
+
+
+def test_cli_run_rejects_invalid_target_resolution(sample_clip, tmp_path):
+    config_path = tmp_path / "job.yaml"
+    _write_config(config_path, sample_clip)
+    workdir = tmp_path / "work"
+
+    with pytest.raises(SystemExit):
+        main(["run", str(config_path), str(workdir), "--no-publish", "--target-resolution", "not-a-resolution"])
+
+
 def test_cli_run_accepts_max_workers(sample_clip, tmp_path):
     config_path = tmp_path / "job.yaml"
     _write_config(config_path, sample_clip)

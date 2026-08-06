@@ -49,6 +49,24 @@ def test_run_pipeline_produces_upscaled_output(sample_clip, tmp_path):
     assert info.height == 96  # 48 * scale(2)
     assert info.has_audio is True
 
+
+def test_run_pipeline_with_target_resolution_pads_to_exact_size(sample_clip, tmp_path):
+    # AI backends only support fixed integer scale factors, so the upscaled
+    # output (128x96 here: 64x48 source at scale=2) rarely lands exactly on
+    # a requested target resolution. target_resolution must letterbox/pad to
+    # the exact requested size without distortion, and audio must still be
+    # muxed in afterward.
+    config = _passthrough_config(str(sample_clip))
+    workdir = tmp_path / "work"
+
+    output = run_pipeline(config, sample_clip, workdir, target_resolution=(256, 256))
+
+    from jutsu.media import probe
+    info = probe(output)
+    assert info.width == 256
+    assert info.height == 256
+    assert info.has_audio is True
+
     # Frames must be discarded per window (extract -> upscale -> encode ->
     # discard -> next window), not left to accumulate unbounded disk usage.
     assert not (workdir / "frames_in_00000").exists()

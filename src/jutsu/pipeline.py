@@ -4,7 +4,7 @@ from pathlib import Path
 
 from jutsu.backends import get_backend
 from jutsu.config import JobConfig
-from jutsu.media import assemble_and_color, concat_segments, extract_and_clean, mux_audio, probe
+from jutsu.media import assemble_and_color, concat_segments, extract_and_clean, mux_audio, pad_to_resolution, probe
 from jutsu.state import JobState
 
 WINDOW_SECONDS = 5.0
@@ -77,6 +77,7 @@ def run_pipeline(
     workdir: Path,
     window_seconds: float = WINDOW_SECONDS,
     max_workers: int = 1,
+    target_resolution: tuple[int, int] | None = None,
 ) -> Path:
     preflight(config, source)
     workdir.mkdir(parents=True, exist_ok=True)
@@ -113,6 +114,15 @@ def run_pipeline(
 
     final_video = workdir / "final_video.mp4"
     concat_segments(segment_paths, final_video)
+
+    if target_resolution is not None:
+        # Pad on the video-only concat output, before muxing -- pad_to_resolution
+        # drops audio by design (a pure spatial transform has no business
+        # touching the audio stream), so this must happen before mux_audio,
+        # not after, or the source's audio would need re-attaching separately.
+        padded_video = workdir / "padded_video.mp4"
+        pad_to_resolution(final_video, target_resolution[0], target_resolution[1], padded_video)
+        final_video = padded_video
 
     final_output = workdir / config.output_name
     if info.has_audio:

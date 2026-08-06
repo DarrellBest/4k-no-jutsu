@@ -8,6 +8,28 @@ from jutsu.media import probe
 from jutsu.pipeline import preflight, run_pipeline
 from jutsu.publish import publish_normal
 
+RESOLUTION_SHORTHANDS = {
+    "4k": (3840, 2160),
+    "uhd": (3840, 2160),
+    "1080p": (1920, 1080),
+    "720p": (1280, 720),
+}
+
+
+def parse_resolution(value: str) -> tuple[int, int]:
+    shorthand = RESOLUTION_SHORTHANDS.get(value.strip().lower())
+    if shorthand is not None:
+        return shorthand
+    parts = value.lower().split("x")
+    if len(parts) == 2 and all(p.isdigit() for p in parts):
+        width, height = int(parts[0]), int(parts[1])
+        if width > 0 and height > 0:
+            return (width, height)
+    raise argparse.ArgumentTypeError(
+        f"invalid resolution: {value!r} (expected e.g. '3840x2160', or one of: "
+        f"{', '.join(sorted(RESOLUTION_SHORTHANDS))})"
+    )
+
 
 def cmd_run(args: argparse.Namespace) -> int:
     config = load_job_config(Path(args.config))
@@ -18,7 +40,11 @@ def cmd_run(args: argparse.Namespace) -> int:
         )
     workdir = Path(args.workdir)
     source = Path(config.source)
-    output = run_pipeline(config, source, workdir, max_workers=args.max_workers)
+    output = run_pipeline(
+        config, source, workdir,
+        max_workers=args.max_workers,
+        target_resolution=args.target_resolution,
+    )
     if config.mode == "normal" and not args.no_publish:
         publish_normal(output, config)
     print(f"Done: {output}")
@@ -101,6 +127,12 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("workdir")
     run_parser.add_argument("--no-publish", action="store_true")
     run_parser.add_argument("--max-workers", type=int, default=1)
+    run_parser.add_argument(
+        "--target-resolution", type=parse_resolution, default=None,
+        help="Letterbox/pad the AI-upscaled output to an exact resolution, e.g. '3840x2160' or '4k'. "
+             "AI backends only support fixed integer scale factors, so this is usually needed to land "
+             "on a standard target size without distortion.",
+    )
     run_parser.set_defaults(func=cmd_run)
 
     compare_parser = sub.add_parser("compare", help="Compare models/settings on a short clip")
