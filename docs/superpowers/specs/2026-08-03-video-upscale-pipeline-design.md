@@ -12,7 +12,7 @@ library) or a "secure mode" output (processed with no plaintext trace on
 disk, final file written straight into a VeraCrypt vault).
 
 First use case is a pair of Naruto videos currently sitting in a pCloud
-`Naruto` folder, but the pipeline is not anime-specific — content-type
+`Naruto` folder, but the pipeline is not anime-specific. Content-type
 profiles make it usable for other video types too.
 
 ## Non-goals
@@ -23,9 +23,10 @@ profiles make it usable for other video types too.
   orchestration around them: frame extraction/batching, temp-file lifecycle,
   model selection, cleanup/color processing, comparison generation, and
   secure-mode handling.
-- Not a GUI. CLI/config-file driven.
+- Not a GUI. CLI/config-file driven (a separate desktop UI wraps the CLI;
+  see `electron/`).
 - Not real-time/streaming playback upscaling (e.g. Anime4K-style live
-  shader upscaling during playback) — this is an offline batch pipeline.
+  shader upscaling during playback). This is an offline batch pipeline.
 
 ## Architecture
 
@@ -70,15 +71,15 @@ profiles make it usable for other video types too.
 One file per job. Fields:
 
 - `source`: local path or pCloud path
-- `profile`: `anime` | `live-action` (extensible) — selects default model +
-  cleanup + color settings
+- `profile`: `anime` | `live-action` (extensible). Selects default model,
+  cleanup, and color settings.
 - `model`: backend + model name + scale factor (overrides profile default)
 - `cleanup`: denoise/deblock/deband filter strengths (overrides profile
   default)
 - `color`: fixed correction parameters (eq/curves/colorbalance values),
   chosen once per job from representative sample frames and applied
-  uniformly across the whole video — this is what guarantees frame-to-frame
-  consistency, not per-frame auto-adjustment
+  uniformly across the whole video. This is what guarantees frame-to-frame
+  consistency, not per-frame auto-adjustment.
 - `mode`: `normal` | `secure`
 - `output`: naming/destination overrides
 
@@ -90,8 +91,8 @@ secure-mode preflight checks below.
 
 ### Inference backends
 
-- `realesrgan-ncnn-vulkan` — general + anime-tuned model
-- `realcugan-ncnn-vulkan` — anime-specialized
+- `realesrgan-ncnn-vulkan`: general + anime-tuned model
+- `realcugan-ncnn-vulkan`: anime-specialized
 - Vulkan-based, so no CUDA-version matching against the host driver;
   extensible to add more backends per profile later.
 
@@ -136,13 +137,14 @@ secure mode viable for full-length video without exceeding available RAM.
 
 - Scratch space mounted as `ramfs`, not `tmpfs`. `ramfs` is never
   swap-backed by kernel design (pinned page cache with no path to disk),
-  so this machine's system-wide swap does not need to be touched. Trade-off:
-  the kernel enforces no size cap on `ramfs`, so the orchestrator must track
-  usage against a configured cap itself and abort cleanly rather than let
-  usage grow unbounded — mitigated by the chunked-processing bound (never
-  more than one window of frames resident at a time).
-- Source video is streamed directly into the `ramfs` mount — via `rclone`
-  if it's on pCloud, via a read-only open if it's already local. It is
+  so this machine's system-wide swap does not need to be touched.
+  Trade-off: the kernel enforces no size cap on `ramfs`, so the
+  orchestrator must track usage against a configured cap itself and abort
+  cleanly rather than let usage grow unbounded. This is mitigated by the
+  chunked-processing bound (never more than one window of frames resident
+  at a time).
+- Source video is streamed directly into the `ramfs` mount, via `rclone`
+  if it's on pCloud, or via a read-only open if it's already local. It is
   never copied to regular disk at any point.
 - Final encoded output is written directly into a mounted VeraCrypt volume.
   The vault mount is the encryption layer; there is no separate encrypt
@@ -151,7 +153,7 @@ secure mode viable for full-length video without exceeding available RAM.
 - Job state/progress tracking (for resumability) also lives in `ramfs` in
   secure mode, never on regular disk.
 - Mounting `ramfs` and the VeraCrypt volume both require root. The
-  orchestrator does not use passwordless sudo for this — the user enters
+  orchestrator does not use passwordless sudo for this; the user enters
   their sudo password interactively when a secure-mode job starts. This is
   intentional: secure mode is for sensitive content, and a conscious
   interactive unlock each time is preferable to unattended automation here.
@@ -166,7 +168,7 @@ secure mode viable for full-length video without exceeding available RAM.
 
 - The orchestrator tracks per-window job state so a crash or interruption
   does not require reprocessing completed windows. In secure mode this
-  state file lives in `ramfs` (lost on unmount/crash, which is acceptable —
+  state file lives in `ramfs` (lost on unmount/crash, which is acceptable:
   a secure job that's interrupted mid-run should not silently resume days
   later from leftover state).
 - Preflight validation before any processing starts: input file exists and
@@ -184,7 +186,7 @@ secure mode viable for full-length video without exceeding available RAM.
 - Config parsing, filter-chain construction, and pipeline stage logic can
   be unit tested without a GPU.
 - End-to-end upscale runs require a working GPU (blocked on the pending
-  driver-mismatch reboot on this machine) — noted as a known gap until
+  driver-mismatch reboot on this machine). Noted as a known gap until
   that reboot happens.
 - Compare-mode HTML generation can be tested against any short sample clip
   once the backends are installed.

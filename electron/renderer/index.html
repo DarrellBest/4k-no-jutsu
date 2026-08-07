@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>4K-NO-JUTSU</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="titlebar">
+    <span class="titlebar-label">4K-NO-JUTSU</span>
+    <div class="titlebar-controls">
+      <button class="titlebar-btn" id="win-minimize" title="Minimize">
+        <svg viewBox="0 0 12 12"><rect x="2" y="5.5" width="8" height="1.2"/></svg>
+      </button>
+      <button class="titlebar-btn" id="win-maximize" title="Maximize">
+        <svg viewBox="0 0 12 12"><rect x="2.2" y="2.2" width="7.6" height="7.6" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
+      </button>
+      <button class="titlebar-btn titlebar-close" id="win-close" title="Close">
+        <svg viewBox="0 0 12 12"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="bg-glow"></div>
+  <div class="bg-grid"></div>
+
+  <header>
+    <h1><span class="glyph">忍</span> 4K-NO-JUTSU</h1>
+    <p class="tagline">AI video upscaling: cleanup · upscale · color · publish</p>
+    <div class="header-rule"></div>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button class="tab-btn active" data-tab="run">
+      <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+      Run
+    </button>
+    <button class="tab-btn" data-tab="compare">
+      <svg viewBox="0 0 24 24"><path d="M9 3v18M4 8h5M4 16h5M15 3v18M15 8h5M15 16h5"/></svg>
+      Compare
+    </button>
+    <button class="tab-btn" data-tab="setup">
+      <svg viewBox="0 0 24 24"><path d="M12 2l1.5 3.5L17 7l-3.5 1.5L12 12l-1.5-3.5L7 7l3.5-1.5z"/><circle cx="18" cy="18" r="3"/></svg>
+      Setup
+    </button>
+    <button class="tab-btn" data-tab="settings">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.6 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09A1.65 1.65 0 0015.4 4.6a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9c.2.63.78 1.05 1.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      Settings
+    </button>
+  </nav>
+
+  <main>
+    <!-- RUN TAB -->
+    <section class="tab-panel active" id="tab-run">
+      <section class="panel warn-panel" id="setup-warning" hidden>
+        <p>
+          <strong>jutsu</strong> wasn't found on PATH. Head to the
+          <a href="#" data-goto-tab="setup">Setup tab</a> to install it, or
+          activate the conda env yourself first
+          (<code>conda activate 4k-no-jutsu</code>).
+        </p>
+      </section>
+
+      <form id="job-form" class="panel fade-in">
+        <div class="field">
+          <label for="source">Source video</label>
+          <div class="row">
+            <input type="text" id="source" placeholder="/path/to/video.mp4" required>
+            <button type="button" id="pick-source">Browse…</button>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="profile">Profile</label>
+            <select id="profile">
+              <option value="anime">anime</option>
+              <option value="live-action">live-action</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="target-resolution">Target resolution</label>
+            <select id="target-resolution">
+              <option value="">native (no padding)</option>
+              <option value="4k" selected>4K / UHD (3840×2160)</option>
+              <option value="1080p">1080p (1920×1080)</option>
+              <option value="720p">720p (1280×720)</option>
+              <option value="custom">custom…</option>
+            </select>
+            <input type="text" id="target-resolution-custom" placeholder="e.g. 3200x1800" hidden>
+          </div>
+
+          <div class="field">
+            <label for="max-workers">Max workers</label>
+            <div class="row">
+              <input type="number" id="max-workers" min="1" value="1">
+              <button type="button" id="suggest-workers" title="Suggest based on this machine's CPU">Auto</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="workdir">Working directory</label>
+          <div class="row">
+            <input type="text" id="workdir" placeholder="/path/to/workdir" required>
+            <button type="button" id="pick-workdir">Browse…</button>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="mode">Mode</label>
+            <select id="mode">
+              <option value="normal">normal</option>
+              <option value="secure">secure</option>
+            </select>
+          </div>
+
+          <div class="field checkbox-field" id="publish-field">
+            <label><input type="checkbox" id="publish" checked> Publish (pCloud/Jellyfin, if configured)</label>
+          </div>
+        </div>
+
+        <div id="secure-fields" hidden>
+          <div class="field">
+            <label for="vault-device">VeraCrypt volume file (must already exist)</label>
+            <div class="row">
+              <input type="text" id="vault-device" placeholder="/path/to/your.hc">
+              <button type="button" id="pick-vault-device">Browse…</button>
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="vault-mount">Vault mount point</label>
+              <div class="row">
+                <input type="text" id="vault-mount" placeholder="/mnt/vault">
+                <button type="button" id="pick-vault-mount">Browse…</button>
+              </div>
+            </div>
+            <div class="field">
+              <label for="ramfs-size">Ramfs size cap (MiB)</label>
+              <input type="number" id="ramfs-size" min="256" step="256" value="4096">
+            </div>
+          </div>
+          <p class="hint">
+            Mounting ramfs scratch and the vault both need root: you'll get
+            normal interactive sudo/passphrase prompts in the log/terminal,
+            never automated.
+          </p>
+        </div>
+
+        <div class="actions">
+          <button type="submit" id="run-button" class="btn-primary">
+            <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg> Run
+          </button>
+          <button type="button" id="cancel-button" class="btn-danger" disabled>Cancel</button>
+        </div>
+      </form>
+
+      <section class="panel" id="progress-panel" hidden>
+        <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+        <p id="progress-text"></p>
+      </section>
+
+      <section class="panel log-panel">
+        <label>Log</label>
+        <pre id="log" data-placeholder="Ready. Configure a job above and hit Run."></pre>
+      </section>
+    </section>
+
+    <!-- COMPARE TAB -->
+    <section class="tab-panel" id="tab-compare">
+      <form id="compare-form" class="panel fade-in">
+        <div class="field">
+          <label for="compare-source">Source video</label>
+          <div class="row">
+            <input type="text" id="compare-source" placeholder="/path/to/video.mp4" required>
+            <button type="button" id="compare-pick-source">Browse…</button>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="compare-profile">Profile</label>
+            <select id="compare-profile">
+              <option value="anime">anime</option>
+              <option value="live-action">live-action</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="compare-start">Start (seconds into source)</label>
+            <input type="number" id="compare-start" min="0" value="60">
+          </div>
+          <div class="field">
+            <label for="compare-duration">Clip duration (seconds)</label>
+            <input type="number" id="compare-duration" min="1" value="15">
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="compare-workdir">Working directory</label>
+          <div class="row">
+            <input type="text" id="compare-workdir" placeholder="/path/to/workdir" required>
+            <button type="button" id="compare-pick-workdir">Browse…</button>
+          </div>
+        </div>
+
+        <p class="hint">
+          Runs realcugan, realesrgan, and a plain-bicubic baseline on the
+          same short clip, then builds a side-by-side HTML comparison
+          report so you can pick a model before committing to a
+          full-length run.
+        </p>
+
+        <div class="actions">
+          <button type="submit" id="compare-run-button" class="btn-primary">
+            <svg viewBox="0 0 24 24"><path d="M9 3v18M4 8h5M4 16h5M15 3v18M15 8h5M15 16h5"/></svg> Compare
+          </button>
+          <button type="button" id="compare-cancel-button" class="btn-danger" disabled>Cancel</button>
+          <button type="button" id="compare-open-report" disabled>Open report</button>
+        </div>
+      </form>
+
+      <section class="panel log-panel">
+        <label>Log</label>
+        <pre id="compare-log" data-placeholder="Ready. Pick a source and hit Compare."></pre>
+      </section>
+    </section>
+
+    <!-- SETUP TAB -->
+    <section class="tab-panel" id="tab-setup">
+      <section class="panel fade-in">
+        <div class="setup-checklist" id="setup-checklist">
+          <div class="setup-item" id="check-env"><span class="dot"></span> Conda environment (<code>4k-no-jutsu</code>)</div>
+          <div class="setup-item" id="check-jutsu"><span class="dot"></span> <code>jutsu</code> installed</div>
+          <div class="setup-item" id="check-backends"><span class="dot"></span> AI backends (realesrgan / realcugan)</div>
+        </div>
+        <p class="hint">
+          Runs the same steps as <code>scripts/setup.sh</code>: creates the
+          conda env, installs <code>jutsu</code> editable, and downloads
+          the vendored AI upscale binaries. Safe to re-run; every step is
+          skipped if already done.
+        </p>
+        <div class="actions">
+          <button type="button" id="run-setup-button" class="btn-primary">Run setup</button>
+          <button type="button" id="recheck-setup-button">Re-check</button>
+        </div>
+      </section>
+
+      <section class="panel log-panel">
+        <label>Log</label>
+        <pre id="setup-log" data-placeholder="Not started."></pre>
+      </section>
+    </section>
+
+    <!-- SETTINGS TAB -->
+    <section class="tab-panel" id="tab-settings">
+      <form id="settings-form" class="panel fade-in">
+        <div class="field">
+          <label for="settings-pcloud">pCloud remote (rclone)</label>
+          <input type="text" id="settings-pcloud" placeholder="myremote:SomeFolder">
+          <p class="hint">
+            Any rclone <code>remote:path</code> you've already configured
+            with <code>rclone config</code>. Leave blank to skip pCloud
+            upload after a normal-mode run.
+          </p>
+        </div>
+
+        <div class="field">
+          <label for="settings-jellyfin">Jellyfin media folder</label>
+          <div class="row">
+            <input type="text" id="settings-jellyfin" placeholder="/path/to/jellyfin/media/Movies">
+            <button type="button" id="settings-pick-jellyfin">Browse…</button>
+          </div>
+          <p class="hint">Leave blank to skip copying into a Jellyfin library after a normal-mode run.</p>
+        </div>
+
+        <div class="field">
+          <label for="settings-ramfs">Default ramfs size cap for secure mode (MiB)</label>
+          <input type="number" id="settings-ramfs" min="256" step="256" value="4096">
+        </div>
+
+        <div class="actions">
+          <button type="submit" id="settings-save-button" class="btn-primary">Save settings</button>
+          <span id="settings-saved-badge" class="saved-badge" hidden>Saved</span>
+        </div>
+      </form>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

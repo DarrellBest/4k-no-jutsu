@@ -1,0 +1,47 @@
+{
+  "name": "4k-no-jutsu-ui",
+  "version": "0.1.0",
+  "description": "Desktop UI for the 4k-no-jutsu AI video upscaling pipeline",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist:linux": "electron-builder --linux AppImage",
+    "dist:win": "electron-builder --win portable",
+    "dist:mac": "electron-builder --mac dmg --universal"
+  },
+  "author": "Darrell Best",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^32.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.darrellbest.4knojutsuui",
+    "productName": "4K-NO-JUTSU",
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "AudioVideo",
+      "artifactName": "4K-NO-JUTSU-${version}.${ext}"
+    },
+    "win": {
+      "target": [
+        "portable"
+      ]
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ]
+    }
+  }
+}

@@ -3,7 +3,7 @@ __pycache__/
 .venv/
 *.egg-info/
 
-# working/scratch data — never belongs in git
+# working/scratch data: never belongs in git
 data/
 work/
 scratch/
@@ -15,3 +15,7 @@ scratch/
 *.hc
 
 vendor/
+
+# Electron UI: dependencies and build output
+electron/node_modules/
+electron/dist/
