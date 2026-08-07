@@ -1,183 +1,254 @@
-# 4k-no-jutsu
+<p align="center">
+  <img src="assets/banner.svg" alt="4K-NO-JUTSU — config-driven AI video upscaling pipeline" width="820">
+</p>
 
-Config-driven pipeline for upscaling video to 4K with AI super-resolution,
-cleaning up compression artifacts, and applying consistent color
-correction. Supports comparing models/settings on short sample clips before
-committing to a full run. A secure mode that leaves no plaintext trace on
-disk is designed but not yet implemented (see Secure mode below).
+<p align="center">
+  A config-driven pipeline that takes any video, cleans it up, upscales it
+  with an AI super-resolution model, color-corrects it, and lands it at an
+  exact target resolution — normal mode publishes to pCloud/Jellyfin,
+  secure mode never leaves plaintext on disk.
+</p>
 
-Design details: [docs/superpowers/specs/2026-08-03-video-upscale-pipeline-design.md](docs/superpowers/specs/2026-08-03-video-upscale-pipeline-design.md)
+Works on any source ffmpeg can read, at any resolution — it isn't tied to
+anime or the example job configs in this repo. Content-type **profiles**
+just pick sensible defaults.
 
-## Pipeline
+## Quick start
+
+```bash
+git clone https://github.com/DarrellBest/4k-no-jutsu ~/4k-no-jutsu
+cd ~/4k-no-jutsu
+./scripts/setup.sh          # conda env + jutsu install + AI backends
+conda activate 4k-no-jutsu
+```
+
+```yaml
+# job.yaml
+source: /path/to/your/video.mp4
+profile: anime   # or "live-action"
+```
+
+```bash
+jutsu run job.yaml ./workdir --target-resolution 4k --max-workers 8
+```
+
+That's the whole thing: extract → cleanup → AI upscale → color correct →
+concat → letterbox to 3840×2160 → mux audio → `./workdir/output.mp4`.
+
+## Install
+
+`scripts/setup.sh` does three things, in order, idempotently:
+
+1. Creates the `4k-no-jutsu` conda env (Python 3.12) if it doesn't exist
+2. `pip install -e ".[dev]"` — installs `jutsu` itself plus test dependencies
+3. Runs `scripts/install_backends.sh`, which fetches the vendored
+   `realesrgan-ncnn-vulkan` / `realcugan-ncnn-vulkan` binaries into `vendor/`
+
+Everything's Vulkan-based, not CUDA — no GPU driver/toolkit version matching
+required. Works even without a GPU via software rendering (e.g. mesa
+lavapipe), just much slower; see [Performance](#performance).
+
+## Usage
+
+### Job config
+
+One YAML file per job:
+
+```yaml
+source: /path/to/video.mp4        # local path, or an rclone remote like pcloud:Folder/video.mp4
+profile: anime                    # anime | live-action — picks backend/model/scale/cleanup/color defaults
+mode: normal                      # normal | secure
+output_name: output.mp4
+
+# All of these override the profile's defaults:
+model:
+  backend: realesrgan             # realesrgan | realcugan | passthrough
+  name: realesr-animevideov3
+  scale: 4
+cleanup:
+  denoise: 3.0
+  deblock: 2.0
+  deband: true
+color:
+  brightness: 0.0
+  contrast: 1.0
+  saturation: 1.0
+  gamma: 1.0
+```
+
+`source` pointing at an rclone remote (`remote:path`) is downloaded
+automatically before processing — local paths are used as-is.
+
+### Run
+
+```bash
+jutsu run job.yaml ./workdir \
+  --target-resolution 4k \
+  --max-workers 8
+```
+
+| Flag | What it does |
+|---|---|
+| `--target-resolution` | Letterbox/pad the upscaled output to an exact size: `4k`/`uhd` (3840×2160), `1080p`, `720p`, or `WIDTHxHEIGHT`. AI backends only support fixed integer scale factors (2×/3×/4×), so this is what actually lands you on a standard size without distortion. Omit it to keep the backend's native scaled-but-unpadded output. |
+| `--max-workers N` | Process N windows concurrently. The AI backend binaries are usually far from saturating a real GPU one window at a time — benchmark on your own hardware, then pick a number; going too high just shifts the bottleneck to CPU/disk. |
+| `--no-publish` | Skip the publish step even in normal mode. |
+
+### Compare mode
+
+Before committing to a full-length run (which can take hours), try several
+models/settings on a short clip:
+
+```bash
+jutsu compare job.yaml ./workdir --start 300 --duration 15
+```
+
+Runs the full pipeline once per (model, settings) combination on a short
+clip, and writes `comparison.html` — a grid of frame crops at matching
+timestamps across the original and every variant — plus labeled sample
+clips you can drop straight into a media player.
+
+### Publishing (normal mode, optional)
+
+Both destinations are opt-in via environment variables. With neither set,
+the finished file just stays in `./workdir` — that's the real output either
+way.
+
+```bash
+export JUTSU_PCLOUD_REMOTE="myremote:SomeFolder"       # any rclone remote:path
+export JUTSU_JELLYFIN_DIR="/path/to/jellyfin/media/Movies"
+```
+
+### Secure mode
+
+For source video that should leave no plaintext trace on disk:
+
+```bash
+jutsu run job.yaml /mnt/ramfs_scratch \
+  --vault-device /path/to/your.hc \
+  --vault-mount /mnt/vault \
+  --target-resolution 4k
+```
+
+Requires an **existing** VeraCrypt volume — create one yourself with the
+`veracrypt` CLI/GUI and set your own passphrase; this tool never generates,
+stores, or captures one. Mounting both the `ramfs` scratch space and the
+vault requires root: you'll get the normal interactive `sudo` / VeraCrypt
+passphrase prompts on your terminal each time a secure job starts — never
+automated, never passwordless.
+
+## How it works
 
 ```mermaid
 flowchart TD
-    A[Source video<br/>local file or pCloud] --> B[Download / stream in]
-    B --> C{Chunked processing loop<br/>one window of frames at a time}
-    C --> D[Cleanup<br/>denoise / deblock / deband]
-    D --> E[AI upscale<br/>realesrgan-ncnn-vulkan / realcugan-ncnn-vulkan]
-    E --> F[Color correct<br/>fixed filter chain, same params every frame]
-    F --> G[Encode + append]
-    G --> C
-    C -->|all windows done| H{Mode}
-    H -->|normal| I[Upload to pCloud<br/>+ copy into Jellyfin library]
-    H -->|secure| J[Write directly into<br/>mounted VeraCrypt vault]
+    A["source: local file or rclone remote"] --> B["download if remote\n(skipped if local)"]
+    B --> C["preflight:\nbinaries, Vulkan, RAM, disk"]
+    C --> D{"chunked processing loop\nN-second windows, up to --max-workers concurrent"}
+    D --> E["extract + cleanup\ndenoise / deblock / deband"]
+    E --> F["AI upscale\nrealesrgan-ncnn-vulkan / realcugan-ncnn-vulkan"]
+    F --> G["color correct\nfixed filter chain, same params every frame"]
+    G --> H["encode segment"]
+    H --> D
+    D -->|all windows done| I["concat segments\n(batched + re-encoded above ~100 segments)"]
+    I --> J{"--target-resolution?"}
+    J -->|yes| K["letterbox/pad to exact size"]
+    J -->|no| L["native AI-upscaled size"]
+    K --> M["mux audio"]
+    L --> M
+    M --> N{mode}
+    N -->|normal| O["optional: pCloud upload\n+ Jellyfin library copy"]
+    N -->|secure| P["move into mounted\nVeraCrypt vault"]
 ```
 
-Cleanup runs before upscaling so artifacts get fixed at native resolution
-instead of being amplified by the upscaler. Color correction is a single
-fixed set of parameters applied to the whole video, not a per-frame
-auto-adjustment, so there's no flicker or drift between frames.
+Cleanup runs before upscaling so compression artifacts get fixed at native
+resolution instead of amplified by the upscaler. Color correction is one
+fixed set of parameters for the whole video, not per-frame auto-adjustment
+— no flicker or drift between frames. Windows process independently
+(disjoint frame/segment paths), which is what makes `--max-workers`
+concurrency and per-window resumability both safe.
 
-## Compare mode
-
-Before committing to a full-length run, try several models/settings on a
-short clip and compare them side by side:
+### Compare mode
 
 ```mermaid
 flowchart LR
     A[Source video] --> B[Extract short clip]
-    B --> C1[Pipeline run:<br/>model/setting A]
-    B --> C2[Pipeline run:<br/>model/setting B]
-    B --> C3[Pipeline run:<br/>model/setting C]
+    B --> C1["Pipeline run:\nrealcugan"]
+    B --> C2["Pipeline run:\nrealesrgan"]
+    B --> C3["Pipeline run:\npassthrough (baseline)"]
     C1 --> D[Labeled sample clips]
     C2 --> D
     C3 --> D
     B --> E[Original clip]
-    E --> F[HTML comparison page<br/>frame-crop grid, same timestamps]
+    E --> F["HTML comparison page\nframe-crop grid, same timestamps"]
     C1 --> F
     C2 --> F
     C3 --> F
 ```
 
-## Secure mode
-
-For source video that should leave no plaintext trace on disk:
+### Secure mode
 
 ```mermaid
 flowchart TD
-    A[Source video] -->|streamed in, never written to regular disk| B[ramfs scratch space<br/>RAM-only, swap-immune]
-    B --> C[Pipeline processing]
-    C --> D[Mounted VeraCrypt vault]
-    D -->|unmounted immediately after| E[Vault stays encrypted at rest]
+    A[Source video] -->|"streamed in if remote,\nread directly if local —\nnever staged on regular disk"| B["ramfs scratch\n(RAM-only, never swap-backed)"]
+    B --> C["Pipeline processing\n(run_pipeline, unmodified)"]
+    C --> D["Mounted VeraCrypt vault"]
+    D -->|unmounted immediately after| E["Vault stays encrypted at rest"]
 ```
 
-`ramfs` (not `tmpfs`) is used for scratch space because it's never
-swap-backed by the kernel, so the pipeline doesn't need system-wide swap
-disabled. Mounting the vault and the `ramfs` scratch space both require an
-interactive sudo prompt — secure mode is never run unattended.
+`ramfs` (not `tmpfs`) is used because it's never swap-backed by kernel
+design. The kernel doesn't actually enforce ramfs's `size=` mount option
+though, so the orchestrator polices its own cap and aborts cleanly if
+exceeded — chunked processing keeps that cap small in practice, since only
+one window's frames are ever resident at a time. Job state and the (fully
+redacted — command names and exit codes only, never filenames or output)
+per-job log both live inside the `ramfs` mount too, so nothing survives
+regular disk or an unmount.
 
-**Not implemented yet.** This section describes the planned design; secure
-mode is a deliberately separate follow-up plan and does not exist in this
-codebase today. A job config with `mode: secure` is refused at the CLI
-(non-zero exit, no processing) rather than silently falling back to normal
-mode.
+## Backends
 
-## Status
+| Backend | Notes |
+|---|---|
+| `realesrgan` | General + anime-tuned models (`realesrgan-x4plus`, `realesrgan-x4plus-anime`, `realesr-animevideov3`) |
+| `realcugan` | Anime-specialized (`models-se` / `models-pro` / `models-nose`) |
+| `passthrough` | Bicubic resize via Pillow, no AI, no GPU — the `live-action`/`anime` profile baseline comparison point, and usable today even without Vulkan |
 
-Normal mode, compare mode, and the CLI are implemented and tested (15
-implementation tasks complete). Task 16, the manual post-reboot GPU
-verification against real NVIDIA hardware, is complete: the NVIDIA driver is
-live post-reboot, and `jutsu compare` ran end-to-end against the real
-`Naruto Shipuden Movie.mp4` source on the real GPU (RTX PRO 6000). Secure
-mode is designed but not implemented (see the Secure mode section above).
+Both AI backends are Vulkan-based ncnn binaries, not CUDA — no GPU driver
+version matching against a specific toolkit release.
 
-**Real-hardware verification turned up and fixed one genuine bug** (not the
-lavapipe flake noted below): the pipeline derived the frame rate used to
-reassemble each processed window from ffprobe's `r_frame_rate`, which is
-correct for constant-frame-rate sources but wrong for the variable-frame-rate
-(VFR) encoding real anime rips typically use. On the real source this made
-every backend's output play back roughly 2x too fast and come out
-correspondingly short — confirmed to affect even the plain `passthrough`
-backend, which has no GPU/timing logic of its own, isolating the bug to
-shared pipeline code rather than the AI backends. Fixed by deriving the
-assembly frame rate from the actual number of frames extracted per window
-divided by that window's real duration, which is correct regardless of
-source frame-rate characteristics. Covered by a new regression test
-(`tests/test_pipeline.py`); full suite passing (57/57). This is exactly the
-kind of defect the existing test suite's constant-frame-rate synthetic
-fixtures could never catch, which is why it only surfaced once a real
-source was used.
+## Performance
 
-**Real full-length timing estimate** (measured on RTX PRO 6000, 5s windows,
-15s sample clip at the 5-minute mark of the real source): realcugan
-~13.5x realtime (~20 hours for the full ~90-minute movie), realesrgan
-~14.2x realtime (~21 hours), passthrough (bicubic CPU/PIL, no GPU) ~28.9x
-realtime (~43 hours) — notably slower than either GPU-accelerated AI
-backend despite doing far less work per frame, since it runs single-threaded
-in Python with no batching. `WINDOW_SECONDS = 5.0`'s per-window ffmpeg
-subprocess overhead is a small fraction of these per-window processing
-times, so the default chunk size doesn't need adjusting for correctness or
-efficiency; a real full run should just be expected to take the better part
-of a day.
+Real numbers from an RTX PRO 6000, upscaling a ~90-minute source at scale=4:
 
-Known flake, not a regression: during earlier development on this machine
-(no working GPU driver yet, so tests ran on the CPU/lavapipe software Vulkan
-fallback), the realcugan and realesrgan backends intermittently produced
-zero output frames for a short clip, causing an unrelated failure a few
-steps later. It was not reproducible in isolation and disappeared across
-several full test-suite reruns, so it looked like a software-rendering
-fallback quirk rather than a code defect — did not reproduce during the real
-GPU verification above.
+| `--max-workers` | Real-world speed | Full movie estimate |
+|---|---|---|
+| 1 (sequential) | ~13x realtime | ~19 hours |
+| 4 | ~4.5x realtime | ~6.7 hours |
+| 8 | ~3.6x realtime | ~5.3 hours |
 
-## Setup
+The AI backend binaries typically don't come close to saturating a real GPU
+processing one window at a time (observed as low as 3-20% GPU utilization
+at `--max-workers 1`), so concurrency gives a large real speedup — until
+CPU/disk becomes the new bottleneck instead. Benchmark a short clip on your
+own hardware (`jutsu run` on a `--duration`-trimmed source, or `jutsu
+compare`) before picking a worker count for a full-length run.
 
-Setup (environment + install + AI backends) is a separate, one-time step
-from actually running the pipeline:
+## Testing
 
-```
-./scripts/setup.sh
-conda activate 4k-no-jutsu
+```bash
+pytest tests/ -v
 ```
 
-`scripts/setup.sh` creates the conda env, installs `jutsu` itself
-(editable), and fetches the vendored `realesrgan`/`realcugan` ncnn-vulkan
-binaries. It's idempotent — safe to re-run.
+Config parsing, filter-chain construction, and pipeline-stage logic are
+unit tested without a GPU. The AI backend tests run the real
+`ncnn-vulkan` binaries against tiny synthetic clips generated on the fly —
+this needs a working Vulkan implementation, which works even without a GPU
+driver via software rendering (mesa lavapipe), just slower. Secure mode's
+tests mock every privileged operation (no real root/VeraCrypt available in
+CI) while exercising the real preflight/mount/cleanup logic and a genuine
+(GPU-free, `passthrough` backend) pipeline run into a temp directory
+standing in for the `ramfs`/vault mount points.
 
-The test suite runs the AI backends' ncnn-vulkan binaries, so it needs a
-working Vulkan implementation. This works even without a GPU driver, via
-software rendering (e.g. mesa lavapipe for CPU-only Vulkan) — slower, but
-functional for development.
+## Repository
 
-## Running
-
-`jutsu` works on any video ffmpeg can read, at any source resolution — it's
-not anime- or Naruto-specific despite the job config examples. A minimal
-job config:
-
-```yaml
-source: /path/to/your/video.mp4
-profile: anime   # or "live-action" — picks default backend/model/cleanup
-```
-
-Run it, letterboxing the AI-upscaled output to an exact target resolution
-(AI backends only support fixed integer scale factors, so this is usually
-what you want to land on a standard size without distortion):
-
-```
-jutsu run job.yaml ./workdir --target-resolution 4k --max-workers 8
-```
-
-`--target-resolution` accepts `4k`/`uhd` (3840x2160), `1080p`, `720p`, or an
-explicit `WIDTHxHEIGHT` like `3200x1800`. Omit it to keep the AI backend's
-native scaled-but-unpadded output. `--max-workers` runs that many windows'
-extract/upscale/assemble concurrently — the AI backend binaries are usually
-far from GPU-saturated processing one window at a time, so this can give a
-large real speedup on a capable GPU; benchmark on your own hardware before
-picking a number; going too high shifts the bottleneck to CPU/disk instead.
-
-For a long source, run `jutsu compare` first on a short clip to sanity-check
-model choice and settings before committing to a full-length run — see
-Compare mode below.
-
-### Publishing (optional)
-
-`jutsu run` (without `--no-publish`) will upload to pCloud and/or copy into
-a Jellyfin media library after processing, but **only if configured** —
-with neither set, the finished file just stays in your workdir (that's the
-real output either way):
-
-```
-export JUTSU_PCLOUD_REMOTE="myremote:SomeFolder"   # any rclone remote:path
-export JUTSU_JELLYFIN_DIR="/path/to/jellyfin/media/Movies"
-```
+- Design spec: [docs/superpowers/specs/2026-08-03-video-upscale-pipeline-design.md](docs/superpowers/specs/2026-08-03-video-upscale-pipeline-design.md)
+- Implementation plan: [docs/superpowers/plans/2026-08-03-core-pipeline.md](docs/superpowers/plans/2026-08-03-core-pipeline.md)
+- GitHub: [`DarrellBest/4k-no-jutsu`](https://github.com/DarrellBest/4k-no-jutsu), public

@@ -1,0 +1,76 @@
+<svg width="1200" height="280" viewBox="0 0 1200 280" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0b0a19"/>
+      <stop offset="55%" stop-color="#1a1033"/>
+      <stop offset="100%" stop-color="#2a0f3d"/>
+    </linearGradient>
+    <linearGradient id="title" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#c084fc"/>
+      <stop offset="45%" stop-color="#f472b6"/>
+      <stop offset="100%" stop-color="#60a5fa"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="7" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="280" fill="url(#bg)"/>
+
+  <!-- faint scanline texture -->
+  <g opacity="0.06">
+    <rect x="0" y="0" width="1200" height="280" fill="url(#bg)"/>
+    <g stroke="#ffffff" stroke-width="1">
+      <line x1="0" y1="20" x2="1200" y2="20"/>
+      <line x1="0" y1="44" x2="1200" y2="44"/>
+      <line x1="0" y1="68" x2="1200" y2="68"/>
+      <line x1="0" y1="92" x2="1200" y2="92"/>
+      <line x1="0" y1="116" x2="1200" y2="116"/>
+      <line x1="0" y1="140" x2="1200" y2="140"/>
+      <line x1="0" y1="164" x2="1200" y2="164"/>
+      <line x1="0" y1="188" x2="1200" y2="188"/>
+      <line x1="0" y1="212" x2="1200" y2="212"/>
+      <line x1="0" y1="236" x2="1200" y2="236"/>
+      <line x1="0" y1="260" x2="1200" y2="260"/>
+    </g>
+  </g>
+
+  <!-- low-res pixel block on the left, upscaling into a sharp video frame on the right -->
+  <g transform="translate(60,90)">
+    <g opacity="0.9">
+      <rect x="0" y="0" width="22" height="22" fill="#3b2f5c"/>
+      <rect x="22" y="0" width="22" height="22" fill="#4b3a6e"/>
+      <rect x="0" y="22" width="22" height="22" fill="#4b3a6e"/>
+      <rect x="22" y="22" width="22" height="22" fill="#3b2f5c"/>
+      <rect x="0" y="44" width="22" height="22" fill="#3b2f5c"/>
+      <rect x="22" y="44" width="22" height="22" fill="#4b3a6e"/>
+    </g>
+    <path d="M 50 33 L 110 33" stroke="#c084fc" stroke-width="2.5" marker-end="url(#arrow)" opacity="0.85"/>
+    <defs>
+      <marker id="arrow" markerWidth="10" markerHeight="10" refX="6" refY="3" orient="auto">
+        <path d="M0,0 L6,3 L0,6 Z" fill="#c084fc"/>
+      </marker>
+    </defs>
+    <g transform="translate(120,-4)">
+      <rect x="0" y="0" width="70" height="70" rx="6" fill="none" stroke="#f472b6" stroke-width="2"/>
+      <path d="M28 22 L48 35 L28 48 Z" fill="#f472b6"/>
+    </g>
+  </g>
+
+  <text x="600" y="130" text-anchor="middle" font-family="'Segoe UI', Helvetica, Arial, sans-serif"
+        font-size="72" font-weight="800" fill="url(#title)" filter="url(#glow)"
+        letter-spacing="2">4K-NO-JUTSU</text>
+
+  <text x="600" y="172" text-anchor="middle" font-family="'Segoe UI', Helvetica, Arial, sans-serif"
+        font-size="21" fill="#c9bfe0" letter-spacing="1">
+    config-driven AI video upscaling &#8212; cleanup &#8226; upscale &#8226; color &#8226; publish
+  </text>
+
+  <g font-family="'Consolas', 'Courier New', monospace" font-size="14" fill="#8b7fae">
+    <text x="600" y="215" text-anchor="middle">realesrgan-ncnn-vulkan &#183; realcugan-ncnn-vulkan &#183; ffmpeg</text>
+  </g>
+</svg>
