@@ -238,8 +238,9 @@ full-length run.
 ## Desktop app
 
 **[Download the latest release](https://github.com/DarrellBest/4k-no-jutsu/releases/latest)**
-(Linux AppImage, Windows portable `.exe`; macOS needs to be built on real
-Mac hardware, see below).
+(Linux AppImage, Windows portable `.exe`, macOS zip for Intel and Apple
+Silicon). The macOS build is unsigned: on first launch, right-click the
+app and choose Open to bypass Gatekeeper.
 
 A cross-platform Electron UI lives in `electron/`, with tabs for Run,
 Compare, Setup, and Settings:
@@ -263,13 +264,13 @@ npm start
 
 Build a distributable: `npm run dist:linux` / `dist:win` / `dist:mac`.
 Verified from this Linux dev machine: `dist:linux` produces a working
-AppImage, and `dist:win` produces a working portable `.exe` (electron-builder
-can cross-build both without needing Windows or Wine for these particular
-targets). `dist:mac` genuinely cannot cross-build: it needs real macOS
-(`hdiutil`, code signing, notarization), confirmed by actually running it
-here and watching it fail on the missing macOS-only `dmg-license` module.
-The config is ready; someone building on real Mac hardware just runs the
-same command.
+AppImage, `dist:win` produces a working portable `.exe`, and `dist:mac`
+produces working `.zip` bundles for both Intel and Apple Silicon.
+electron-builder can cross-build all three from Linux without needing
+Windows, Wine, or macOS. A real DMG installer (`dist:mac:dmg`) does need
+actual macOS, since it depends on `hdiutil` and the macOS-only
+`dmg-license` module; the zip target sidesteps that and is what the
+release above ships.
 
 ## Testing
 

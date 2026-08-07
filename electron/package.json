@@ -7,7 +7,8 @@
     "start": "electron .",
     "dist:linux": "electron-builder --linux AppImage",
     "dist:win": "electron-builder --win portable",
-    "dist:mac": "electron-builder --mac dmg --universal"
+    "dist:mac": "electron-builder --mac zip",
+    "dist:mac:dmg": "electron-builder --mac dmg"
   },
   "author": "Darrell Best",
   "license": "MIT",
@@ -40,7 +41,7 @@
     },
     "mac": {
       "target": [
-        "dmg"
+        "zip"
       ]
     }
   }
