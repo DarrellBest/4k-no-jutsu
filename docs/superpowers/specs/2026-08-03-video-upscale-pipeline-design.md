@@ -105,9 +105,9 @@ Given a source and a short time range:
 3. Output labeled sample clips (`sample_original.mp4`,
    `sample_realcugan_x4.mp4`, etc.) for playback in a normal media player.
 4. Generate an HTML comparison page: a grid of frame crops from the same
-   timestamps across original + each variant, embedded as data URIs,
-   published as a Claude Code artifact for quick visual triage before
-   committing to a full-length run.
+   timestamps across original + each variant, embedded as data URIs, opened
+   directly in a browser for quick visual triage before committing to a
+   full-length run.
 
 ## Pipeline order
 
@@ -202,4 +202,4 @@ secure mode viable for full-length video without exceeding available RAM.
 ## Repository
 
 - Local: `~/projects/4k-no-jutsu`
-- GitHub: `DarrellBest/4k-no-jutsu`, private
+- GitHub: `DarrellBest/4k-no-jutsu`, public

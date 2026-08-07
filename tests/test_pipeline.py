@@ -269,3 +269,142 @@ def test_preflight_raises_for_missing_backend_executable(sample_clip, tmp_path):
 
     with pytest.raises(FileNotFoundError, match="fake_missing_exe"):
         preflight(config, sample_clip)
+
+
+def test_preflight_raises_when_backend_needs_vulkan_but_none_available(sample_clip, tmp_path, monkeypatch):
+    import jutsu.pipeline as pipeline_module
+
+    real_exe = tmp_path / "fake-upscaler-binary"
+    real_exe.write_text("not a real binary, just needs to exist")
+
+    class FakeVulkanBackend:
+        executable = real_exe
+
+        def upscale(self, frames_in, frames_out, scale, model):
+            raise AssertionError("should never be called: preflight must catch this first")
+
+    register_backend("fake_vulkan_backend", FakeVulkanBackend())
+    config = replace(_passthrough_config(str(sample_clip)), backend="fake_vulkan_backend")
+
+    monkeypatch.setattr(pipeline_module, "_vulkan_available", lambda: False)
+
+    with pytest.raises(RuntimeError, match="Vulkan"):
+        preflight(config, sample_clip)
+
+
+def test_preflight_passes_when_backend_needs_vulkan_and_it_is_available(sample_clip, tmp_path, monkeypatch):
+    import jutsu.pipeline as pipeline_module
+
+    real_exe = tmp_path / "fake-upscaler-binary"
+    real_exe.write_text("not a real binary, just needs to exist")
+
+    class FakeVulkanBackend:
+        executable = real_exe
+
+        def upscale(self, frames_in, frames_out, scale, model):
+            pass
+
+    register_backend("fake_vulkan_backend_ok", FakeVulkanBackend())
+    config = replace(_passthrough_config(str(sample_clip)), backend="fake_vulkan_backend_ok")
+
+    monkeypatch.setattr(pipeline_module, "_vulkan_available", lambda: True)
+
+    preflight(config, sample_clip)  # must not raise
+
+
+def test_preflight_skips_vulkan_check_for_backends_without_executable(sample_clip, monkeypatch):
+    # passthrough has no `.executable` attribute -- it's pure Python/PIL, no
+    # GPU/Vulkan involved, so the Vulkan check must not even run for it.
+    import jutsu.pipeline as pipeline_module
+
+    def _fail_if_called():
+        raise AssertionError("Vulkan check must not run for a backend with no .executable")
+
+    monkeypatch.setattr(pipeline_module, "_vulkan_available", _fail_if_called)
+
+    config = _passthrough_config(str(sample_clip))
+    preflight(config, sample_clip)  # must not raise
+
+
+def test_preflight_raises_when_disk_space_insufficient(sample_clip, tmp_path, monkeypatch):
+    import shutil as shutil_module
+    import jutsu.pipeline as pipeline_module
+
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+
+    fake_usage = shutil_module.disk_usage(tmp_path)._replace(free=1024)  # 1 KiB, way under threshold
+    monkeypatch.setattr(pipeline_module.shutil, "disk_usage", lambda path: fake_usage)
+
+    config = _passthrough_config(str(sample_clip))
+    with pytest.raises(RuntimeError, match="disk space"):
+        preflight(config, sample_clip, workdir)
+
+
+def test_preflight_passes_with_sufficient_disk_space(sample_clip, tmp_path, monkeypatch):
+    import shutil as shutil_module
+    import jutsu.pipeline as pipeline_module
+
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+
+    fake_usage = shutil_module.disk_usage(tmp_path)._replace(free=10 * 1024**3)  # 10 GiB
+    monkeypatch.setattr(pipeline_module.shutil, "disk_usage", lambda path: fake_usage)
+
+    config = _passthrough_config(str(sample_clip))
+    preflight(config, sample_clip, workdir)  # must not raise
+
+
+def test_preflight_skips_disk_check_without_workdir(sample_clip):
+    # cmd_compare's early guard call and any other caller not yet at the
+    # workdir-creation point can't check disk space at a location that
+    # doesn't exist yet -- workdir is optional, and disk check is skipped
+    # entirely when it's not given.
+    config = _passthrough_config(str(sample_clip))
+    preflight(config, sample_clip)  # must not raise, no workdir given
+
+
+def test_preflight_raises_when_ram_insufficient(sample_clip, tmp_path, monkeypatch):
+    import jutsu.pipeline as pipeline_module
+
+    monkeypatch.setattr(pipeline_module, "_available_ram_bytes", lambda: 1024)  # 1 KiB
+
+    config = _passthrough_config(str(sample_clip))
+    with pytest.raises(RuntimeError, match="RAM|memory"):
+        preflight(config, sample_clip)
+
+
+def test_preflight_passes_with_sufficient_ram(sample_clip, monkeypatch):
+    import jutsu.pipeline as pipeline_module
+
+    monkeypatch.setattr(pipeline_module, "_available_ram_bytes", lambda: 4 * 1024**3)  # 4 GiB
+
+    config = _passthrough_config(str(sample_clip))
+    preflight(config, sample_clip)  # must not raise
+
+
+def test_run_pipeline_writes_per_job_log(sample_clip, tmp_path):
+    config = _passthrough_config(str(sample_clip))
+    workdir = tmp_path / "work"
+
+    run_pipeline(config, sample_clip, workdir)
+
+    log_path = workdir / "job.log"
+    assert log_path.exists()
+    content = log_path.read_text()
+    # Real subprocess invocations (ffmpeg/ffprobe) must actually be recorded,
+    # not just an empty file.
+    assert "ffmpeg" in content or "ffprobe" in content
+    assert "exit: 0" in content
+
+
+def test_run_pipeline_resets_job_log_after_completion(sample_clip, tmp_path):
+    # A later, unrelated media.py subprocess call in the same process must
+    # not keep writing to this job's now-stale log path.
+    from jutsu import joblog
+
+    config = _passthrough_config(str(sample_clip))
+    workdir = tmp_path / "work"
+    run_pipeline(config, sample_clip, workdir)
+
+    assert joblog._log_path is None

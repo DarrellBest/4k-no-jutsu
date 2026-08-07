@@ -1,3 +1,6 @@
+import subprocess
+from pathlib import Path
+
 import pytest
 import yaml
 
@@ -16,6 +19,35 @@ def test_cli_run_produces_output_without_publishing(sample_clip, tmp_path):
     exit_code = main(["run", str(config_path), str(workdir), "--no-publish"])
 
     assert exit_code == 0
+    assert (workdir / "output.mp4").exists()
+
+
+def test_cli_run_downloads_remote_source_before_running(sample_clip, tmp_path, monkeypatch):
+    # A pCloud/rclone `source:` in the job config must be fetched to a local
+    # file before the pipeline runs, per the architecture's "download
+    # (skipped if local)" step -- simulated here via a fake rclone that
+    # copies the real sample_clip bytes so the rest of the pipeline can
+    # actually process it.
+    config_path = tmp_path / "job.yaml"
+    _write_config(config_path, "pcloud:Naruto/sample.mp4")
+    workdir = tmp_path / "work"
+
+    real_run = subprocess.run
+
+    def fake_subprocess_run(cmd, *args, **kwargs):
+        if cmd[:2] == ["rclone", "copyto"]:
+            dest = Path(cmd[3])
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(sample_clip.read_bytes())
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+        return real_run(cmd, *args, **kwargs)
+
+    monkeypatch.setattr("subprocess.run", fake_subprocess_run)
+
+    exit_code = main(["run", str(config_path), str(workdir), "--no-publish"])
+
+    assert exit_code == 0
+    assert (workdir / "downloaded_source" / "sample.mp4").exists()
     assert (workdir / "output.mp4").exists()
 
 

@@ -4,6 +4,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+from jutsu import joblog
 from jutsu.filters import build_cleanup_filter, build_color_filter
 from jutsu.profiles import CleanupSettings, ColorSettings
 
@@ -20,9 +21,12 @@ class MediaInfo:
 def _run(cmd: list[str]) -> subprocess.CompletedProcess:
     """Run a subprocess, surfacing captured stderr in the exception on failure."""
     try:
-        return subprocess.run(cmd, check=True, capture_output=True, text=True)
+        result = subprocess.run(cmd, check=True, capture_output=True, text=True)
     except subprocess.CalledProcessError as e:
+        joblog.log_subprocess(cmd, e.returncode, e.stdout or "", e.stderr or "")
         raise RuntimeError(f"{cmd[0]} failed (exit {e.returncode}): {e.stderr}") from e
+    joblog.log_subprocess(cmd, result.returncode, result.stdout, result.stderr)
+    return result
 
 
 def probe(source: Path) -> MediaInfo:

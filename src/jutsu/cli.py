@@ -3,6 +3,7 @@ from pathlib import Path
 
 from jutsu.compare import Variant, run_compare
 from jutsu.config import load_job_config
+from jutsu.download import download_source
 from jutsu.html_report import build_comparison_html
 from jutsu.media import probe
 from jutsu.pipeline import preflight, run_pipeline
@@ -39,7 +40,7 @@ def cmd_run(args: argparse.Namespace) -> int:
             "planned secure-mode design. Refusing to run this job."
         )
     workdir = Path(args.workdir)
-    source = Path(config.source)
+    source = download_source(config.source, workdir / "downloaded_source")
     output = run_pipeline(
         config, source, workdir,
         max_workers=args.max_workers,
@@ -54,14 +55,14 @@ def cmd_run(args: argparse.Namespace) -> int:
 def cmd_compare(args: argparse.Namespace) -> int:
     config = load_job_config(Path(args.config))
     workdir = Path(args.workdir)
-    source = Path(config.source)
+    source = download_source(config.source, workdir / "downloaded_source")
 
     # Must run before ANY plaintext intermediate is written. run_compare's
     # extract_clip writes clip_source.mp4 to plaintext disk before
     # run_pipeline (and therefore preflight, where the secure-mode check now
     # lives) is ever reached, so cmd_compare needs its own early call to the
     # same guard rather than relying on run_pipeline to catch it downstream.
-    preflight(config, source)
+    preflight(config, source, workdir)
 
     variants = [
         Variant(label="realcugan", backend="realcugan", model="models-se", scale=config.scale),

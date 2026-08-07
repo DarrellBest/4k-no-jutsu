@@ -1,6 +1,7 @@
 import subprocess
 from pathlib import Path
 
+from jutsu import joblog
 from jutsu.backends import register_backend, vendor_dir
 
 
@@ -21,9 +22,11 @@ class RealesrganBackend:
             "-n", model,
         ]
         try:
-            subprocess.run(cmd, check=True, capture_output=True, text=True)
+            result = subprocess.run(cmd, check=True, capture_output=True, text=True)
         except subprocess.CalledProcessError as e:
+            joblog.log_subprocess(cmd, e.returncode, e.stdout or "", e.stderr or "")
             raise RuntimeError(f"{cmd[0]} failed (exit {e.returncode}): {e.stderr}") from e
+        joblog.log_subprocess(cmd, result.returncode, result.stdout, result.stderr)
 
 
 register_backend("realesrgan", RealesrganBackend())
