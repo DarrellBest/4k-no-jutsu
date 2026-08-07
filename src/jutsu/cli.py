@@ -8,6 +8,7 @@ from jutsu.html_report import build_comparison_html
 from jutsu.media import probe
 from jutsu.pipeline import preflight, run_pipeline
 from jutsu.publish import publish_normal
+from jutsu.secure import DEFAULT_RAMFS_SIZE_MB, run_secure_pipeline
 
 RESOLUTION_SHORTHANDS = {
     "4k": (3840, 2160),
@@ -34,11 +35,28 @@ def parse_resolution(value: str) -> tuple[int, int]:
 
 def cmd_run(args: argparse.Namespace) -> int:
     config = load_job_config(Path(args.config))
+
     if config.mode == "secure":
-        raise SystemExit(
-            "Secure mode is not implemented yet, see docs/superpowers/plans for the "
-            "planned secure-mode design. Refusing to run this job."
+        if not args.vault_device or not args.vault_mount:
+            raise SystemExit(
+                "Secure mode requires --vault-device and --vault-mount "
+                "(an existing VeraCrypt volume file and where to mount it). "
+                "The vault itself must already exist -- create it once with "
+                "the veracrypt CLI/GUI and set your own passphrase, this "
+                "tool never generates or stores one."
+            )
+        output = run_secure_pipeline(
+            config, config.source,
+            ramfs_mount=Path(args.workdir),
+            vault_device=Path(args.vault_device),
+            vault_mount=Path(args.vault_mount),
+            size_cap_mb=args.ramfs_size_mb,
+            max_workers=args.max_workers,
+            target_resolution=args.target_resolution,
         )
+        print(f"Done: {output}")
+        return 0
+
     workdir = Path(args.workdir)
     source = download_source(config.source, workdir / "downloaded_source")
     output = run_pipeline(
@@ -133,6 +151,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="Letterbox/pad the AI-upscaled output to an exact resolution, e.g. '3840x2160' or '4k'. "
              "AI backends only support fixed integer scale factors, so this is usually needed to land "
              "on a standard target size without distortion.",
+    )
+    run_parser.add_argument(
+        "--vault-device", default=None,
+        help="[secure mode only] path to an existing VeraCrypt volume file. Must already exist -- "
+             "this tool never creates a vault or generates/stores a passphrase.",
+    )
+    run_parser.add_argument(
+        "--vault-mount", default=None,
+        help="[secure mode only] where to mount the VeraCrypt volume for the duration of writing output.",
+    )
+    run_parser.add_argument(
+        "--ramfs-size-mb", type=int, default=DEFAULT_RAMFS_SIZE_MB,
+        help=f"[secure mode only] ramfs scratch size cap in MiB, self-enforced since the kernel doesn't "
+             f"cap ramfs (default: {DEFAULT_RAMFS_SIZE_MB}).",
     )
     run_parser.set_defaults(func=cmd_run)
 

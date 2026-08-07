@@ -1,5 +1,6 @@
 import subprocess
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 import yaml
@@ -99,7 +100,7 @@ def test_cli_run_accepts_max_workers(sample_clip, tmp_path):
     assert (workdir / "output.mp4").exists()
 
 
-def test_cli_run_rejects_secure_mode(sample_clip, tmp_path):
+def test_cli_run_rejects_secure_mode_without_vault_args(sample_clip, tmp_path):
     config_path = tmp_path / "job.yaml"
     _write_config(config_path, sample_clip, mode="secure")
     workdir = tmp_path / "work"
@@ -107,9 +108,36 @@ def test_cli_run_rejects_secure_mode(sample_clip, tmp_path):
     with pytest.raises(SystemExit):
         main(["run", str(config_path), str(workdir), "--no-publish"])
 
-    # Secure mode isn't implemented: no output should be produced, and none
-    # of the pipeline's plaintext intermediates should exist on regular disk.
+    # --vault-device/--vault-mount are required for secure mode; without
+    # them, refuse before touching anything (no mount attempt, no output).
     assert not (workdir / "output.mp4").exists()
+
+
+def test_cli_run_secure_mode_end_to_end_with_mocked_mounts(sample_clip, tmp_path, monkeypatch):
+    monkeypatch.setattr("jutsu.secure.shutil.which", lambda name: f"/usr/bin/{name}")
+    config_path = tmp_path / "job.yaml"
+    _write_config(config_path, sample_clip, mode="secure")
+    ramfs_mount = tmp_path / "ramfs"
+    ramfs_mount.mkdir()
+    vault_device = tmp_path / "vault.hc"
+    vault_device.write_bytes(b"fake vault container")
+    vault_mount = tmp_path / "vault_mount"
+    vault_mount.mkdir()
+
+    with (
+        patch("jutsu.secure.mount_ramfs"),
+        patch("jutsu.secure.unmount_ramfs"),
+        patch("jutsu.secure.mount_veracrypt"),
+        patch("jutsu.secure.unmount_veracrypt"),
+    ):
+        exit_code = main([
+            "run", str(config_path), str(ramfs_mount),
+            "--vault-device", str(vault_device),
+            "--vault-mount", str(vault_mount),
+        ])
+
+    assert exit_code == 0
+    assert (vault_mount / "output.mp4").exists()
 
 
 def test_cli_compare_produces_report(sample_clip, tmp_path):
