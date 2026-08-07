@@ -237,6 +237,10 @@ full-length run.
 
 ## Desktop app
 
+**[Download the latest release](https://github.com/DarrellBest/4k-no-jutsu/releases/latest)**
+(Linux AppImage, Windows portable `.exe`; macOS needs to be built on real
+Mac hardware, see below).
+
 A cross-platform Electron UI lives in `electron/`, with tabs for Run,
 Compare, Setup, and Settings:
 
