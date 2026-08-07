@@ -23,11 +23,71 @@
 
   <div class="bg-glow"></div>
   <div class="bg-grid"></div>
+  <div class="embers" aria-hidden="true">
+    <span class="ember"></span><span class="ember"></span><span class="ember"></span>
+    <span class="ember"></span><span class="ember"></span><span class="ember"></span>
+    <span class="ember"></span><span class="ember"></span><span class="ember"></span>
+    <span class="ember"></span><span class="ember"></span><span class="ember"></span>
+    <span class="ember"></span><span class="ember"></span>
+  </div>
 
   <header>
+    <svg class="ink-scene" viewBox="0 0 1400 300" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
+      <defs>
+        <radialGradient id="moonGlow" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#f3d9a4" stop-opacity="0.85"/>
+          <stop offset="35%" stop-color="#e3b155" stop-opacity="0.3"/>
+          <stop offset="100%" stop-color="#e3b155" stop-opacity="0"/>
+        </radialGradient>
+        <linearGradient id="skyFade" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#0d0b0a" stop-opacity="0"/>
+          <stop offset="100%" stop-color="#0d0b0a" stop-opacity="1"/>
+        </linearGradient>
+      </defs>
+
+      <g class="moon-wrap">
+        <circle cx="1040" cy="66" r="92" fill="url(#moonGlow)"/>
+        <circle cx="1040" cy="66" r="32" fill="#f3e2bb"/>
+      </g>
+
+      <g class="layer-far" fill="#241d16" opacity="0.55">
+        <path d="M0,180 L120,120 220,160 340,100 460,150 600,110 760,165 900,120 1050,150 1200,110 1400,150 1400,300 0,300 Z"/>
+      </g>
+
+      <g class="layer-mid" fill="#1d1712" opacity="0.8">
+        <path d="M0,232 L150,192 300,226 480,176 650,222 820,182 1000,226 1180,192 1400,222 1400,300 0,300 Z"/>
+        <g transform="translate(742,152)" stroke="#3a2a1c" stroke-width="6" fill="none" stroke-linecap="round">
+          <path d="M-46,42 L-46,-10 M46,42 L46,-10"/>
+          <path d="M-60,-14 L60,-14"/>
+          <path d="M-52,2 L52,2"/>
+        </g>
+      </g>
+
+      <g class="mist" opacity="0.16" fill="#efe6d2">
+        <ellipse class="mist-a" cx="300" cy="248" rx="260" ry="14"/>
+        <ellipse class="mist-b" cx="900" cy="262" rx="320" ry="16"/>
+        <ellipse class="mist-c" cx="1250" cy="238" rx="220" ry="12"/>
+      </g>
+
+      <g class="layer-near" fill="#141009" opacity="0.92">
+        <path d="M0,270 L200,242 420,266 640,232 880,268 1100,236 1400,266 1400,300 0,300 Z"/>
+      </g>
+
+      <rect x="0" y="0" width="1400" height="300" fill="url(#skyFade)"/>
+    </svg>
+
+    <svg class="hanko" viewBox="0 0 64 64" aria-hidden="true">
+      <rect x="4" y="4" width="56" height="56" rx="7" fill="#b23b26"/>
+      <rect x="4" y="4" width="56" height="56" rx="7" fill="none" stroke="#7a2417" stroke-width="2" opacity="0.6"/>
+      <text x="32" y="42" text-anchor="middle" font-family="serif" font-size="32" fill="#f4e9d8">術</text>
+    </svg>
+
     <h1><span class="glyph">忍</span> 4K-NO-JUTSU</h1>
-    <p class="tagline">AI video upscaling: cleanup · upscale · color · publish</p>
-    <div class="header-rule"></div>
+    <p class="tagline">cleanup<span class="sep">→</span>upscale<span class="sep">→</span>color<span class="sep">→</span>publish</p>
+
+    <svg class="brush-rule" viewBox="0 0 220 14" aria-hidden="true">
+      <path pathLength="1" d="M2,7 C40,2 70,12 110,6 C150,1 180,10 218,6" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+    </svg>
   </header>
 
   <nav class="tabs" id="tabs">
@@ -40,7 +100,11 @@
       Compare
     </button>
     <button class="tab-btn" data-tab="setup">
-      <svg viewBox="0 0 24 24"><path d="M12 2l1.5 3.5L17 7l-3.5 1.5L12 12l-1.5-3.5L7 7l3.5-1.5z"/><circle cx="18" cy="18" r="3"/></svg>
+      <svg viewBox="0 0 24 24">
+        <path d="M12 2c1 3 2 4 5 5-3 1-4 2-5 5-1-3-2-4-5-5 3-1 4-2 5-5z"/>
+        <path d="M12 2c1 3 2 4 5 5-3 1-4 2-5 5-1-3-2-4-5-5 3-1 4-2 5-5z" transform="rotate(90 12 12)"/>
+        <circle cx="12" cy="12" r="1.5"/>
+      </svg>
       Setup
     </button>
     <button class="tab-btn" data-tab="settings">
