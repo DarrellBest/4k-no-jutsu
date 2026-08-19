@@ -294,6 +294,8 @@ standing in for the `ramfs`/vault mount points.
 - Implementation plan: [docs/superpowers/plans/2026-08-03-core-pipeline.md](docs/superpowers/plans/2026-08-03-core-pipeline.md)
 - GitHub: [`DarrellBest/4k-no-jutsu`](https://github.com/DarrellBest/4k-no-jutsu), public
 
+<img alt="License: PolyForm Noncommercial" src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-1d3b63?style=flat-square">
+
 ## License
 
 [PolyForm Noncommercial License 1.0.0](LICENSE) — free to use, modify, and

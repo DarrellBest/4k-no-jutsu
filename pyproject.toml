@@ -1,6 +1,6 @@
 [project]
 name = "4k-no-jutsu"
-version = "0.1.0"
+version = "0.1.1"
 description = "Config-driven AI video upscaling pipeline"
 requires-python = ">=3.11"
 # Free for noncommercial use; commercial use needs a separate paid licence.

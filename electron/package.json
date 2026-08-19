@@ -11,7 +11,7 @@
     "dist:mac:dmg": "electron-builder --mac dmg"
   },
   "author": "Darrell Best",
-  "license": "MIT",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "devDependencies": {
     "electron": "^32.0.0",
     "electron-builder": "^24.13.3"
