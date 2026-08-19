@@ -293,3 +293,18 @@ standing in for the `ramfs`/vault mount points.
 - Design spec: [docs/superpowers/specs/2026-08-03-video-upscale-pipeline-design.md](docs/superpowers/specs/2026-08-03-video-upscale-pipeline-design.md)
 - Implementation plan: [docs/superpowers/plans/2026-08-03-core-pipeline.md](docs/superpowers/plans/2026-08-03-core-pipeline.md)
 - GitHub: [`DarrellBest/4k-no-jutsu`](https://github.com/DarrellBest/4k-no-jutsu), public
+
+## License
+
+[PolyForm Noncommercial License 1.0.0](LICENSE) — free to use, modify, and
+share for personal use and any other noncommercial purpose.
+
+- **Commercial use** is not granted by this license. Commercial licenses are
+  available: email `4k-no-jutsu@darrellbest.com` with the subject line "commercial licensing".
+- **Attribution required.** Anything distributed, derived from, or built on
+  this project must give visible credit to Darrell Best and link this
+  repository, somewhere a user or reader will actually see it — documentation,
+  an about/credits screen, or equivalent. Preserving source-file copyright
+  headers alone is not sufficient.
+
+See [`LICENSE`](LICENSE) for the full license text and the Additional Terms.

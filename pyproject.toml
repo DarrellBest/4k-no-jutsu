@@ -3,6 +3,10 @@ name = "4k-no-jutsu"
 version = "0.1.0"
 description = "Config-driven AI video upscaling pipeline"
 requires-python = ">=3.11"
+# Free for noncommercial use; commercial use needs a separate paid licence.
+# See LICENSE for the full text and the attribution/commercial Additional Terms.
+license = "PolyForm-Noncommercial-1.0.0"
+license-files = ["LICENSE"]
 dependencies = [
     "pyyaml>=6.0",
     "pillow>=10.0",
@@ -15,7 +19,9 @@ dev = ["pytest>=8.0"]
 jutsu = "jutsu.cli:main"
 
 [build-system]
-requires = ["setuptools>=68"]
+# setuptools >= 77 is the floor for PEP 639 (`license` as an SPDX expression
+# plus `license-files`), which the [project] table above uses.
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
